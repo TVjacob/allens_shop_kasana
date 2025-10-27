@@ -11,26 +11,80 @@
     <!-- ---------------- Products Tab ---------------- -->
     <div v-if="activeTab==='products'" class="animate-fadeIn">
       <!-- Add/Edit Product Form -->
-      <form @submit.prevent="submitProduct" class="mb-6 flex flex-wrap gap-3 items-center bg-white p-4 rounded-xl shadow">
-        <input v-model="productForm.name" placeholder="Product Name" class="input" required />
-        <input v-model="productForm.sku" placeholder="SKU" class="input" required />
-        <input v-model.number="productForm.price" type="number" min="1" placeholder="Price" class="input" />
-        <select v-model="productForm.category_id" class="input">
-          <option disabled value="">Select Category</option>
-          <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-        </select>
+      <form @submit.prevent="submitProduct" class="mb-6 flex flex-wrap gap-4 items-start bg-white p-6 rounded-xl shadow">
 
-        <button :disabled="loading" class="btn-primary">
-          {{ editingProduct ? 'Update' : 'Add' }} Product
-        </button>
-        <button
-          v-if="editingProduct"
-          type="button"
-          @click="cancelProductEdit"
-          class="btn-secondary"
-        >
-          Cancel
-        </button>
+        <!-- Product Name -->
+        <div class="flex flex-col flex-1 min-w-[200px]">
+          <label class="mb-1 font-medium text-gray-700">Product Name</label>
+          <input 
+            v-model="productForm.name" 
+            type="text"
+            placeholder="Enter product name" 
+            class="input placeholder-gray-400" 
+            required 
+          />
+        </div>
+
+        <!-- SKU -->
+        <div class="flex flex-col flex-1 min-w-[150px]">
+          <label class="mb-1 font-medium text-gray-700">Track No / SKU</label>
+          <input 
+            v-model="productForm.sku" 
+            type="text"
+            placeholder="Enter track number or SKU" 
+            class="input placeholder-gray-400" 
+            required 
+          />
+        </div>
+
+        <!-- Price -->
+        <div class="flex flex-col flex-1 min-w-[120px]">
+          <label class="mb-1 font-medium text-gray-700">Price (UGX)</label>
+          <input 
+            v-model.number="productForm.price" 
+            type="number" 
+            min="1"
+            placeholder="Price" 
+            class="input placeholder-gray-400" 
+          />
+        </div>
+
+        <!-- Whole Price -->
+        <div class="flex flex-col flex-1 min-w-[120px]">
+          <label class="mb-1 font-medium text-gray-700">Wholesale Price (UGX)</label>
+          <input 
+            v-model.number="productForm.whole_price" 
+            type="number" 
+            min="0"
+            placeholder="Wholesale Price" 
+            class="input placeholder-gray-400" 
+          />
+        </div>
+
+        <!-- Category -->
+        <div class="flex flex-col flex-1 min-w-[150px]">
+          <label class="mb-1 font-medium text-gray-700">Category</label>
+          <select v-model="productForm.category_id" class="input">
+            <option disabled value="">Select Category</option>
+            <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+          </select>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex gap-2 items-end">
+          <button :disabled="loading" class="btn-primary">
+            {{ editingProduct ? 'Update' : 'Add' }} Product
+          </button>
+          <button
+            v-if="editingProduct"
+            type="button"
+            @click="cancelProductEdit"
+            class="btn-secondary"
+          >
+            Cancel
+          </button>
+        </div>
+
       </form>
 
       <!-- Search Product -->
@@ -53,7 +107,14 @@
         <table class="min-w-full border-collapse text-sm">
           <thead>
             <tr class="bg-gray-100 text-gray-700">
-              <th v-for="h in ['ID','Name','SKU','Price','Category','Stock Qty','Actions']" :key="h" class="th">{{ h }}</th>
+              <th class="th">ID</th>
+              <th class="th">Name</th>
+              <th class="th">SKU</th>
+              <th class="th">Price</th>
+              <th class="th">Wholesale Price</th>
+              <th class="th">Category</th>
+              <th class="th">Stock Qty</th>
+              <th class="th">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -66,6 +127,7 @@
               <td class="td font-medium">{{ product.name }}</td>
               <td class="td">{{ product.sku }}</td>
               <td class="td">{{ formatPrice(product.price) }}</td>
+              <td class="td">{{ formatPrice(product.whole_price) }}</td>
               <td class="td">{{ getCategoryName(product.category_id) }}</td>
               <td class="td text-center">{{ product.quantity ?? 0 }}</td>
               <td class="td text-center">
@@ -145,9 +207,9 @@ export default {
     return {
       activeTab: 'products',
       products: [],
-      allProducts: [], // 🔹 keep all for local filtering
+      allProducts: [],
       categories: [],
-      productForm: { id: null, name: '', sku: '', price: 0, category_id: '' },
+      productForm: { id: null, name: '', sku: '', price: 0, whole_price: 0, category_id: '' },
       editingProduct: false,
       categoryForm: { id: null, name: '' },
       editingCategory: false,
@@ -185,9 +247,7 @@ export default {
     async submitCategory() {
       try {
         this.loading = true;
-        if (!this.categoryForm.name.trim()) {
-          return this.showNotification('Category name is required.');
-        }
+        if (!this.categoryForm.name.trim()) return this.showNotification('Category name is required.');
         if (this.editingCategory) {
           await api.put(`/inventory/categories/${this.categoryForm.id}`, this.categoryForm);
           this.showNotification('Category updated successfully!');
@@ -251,7 +311,7 @@ export default {
           await api.post('/inventory/products', this.productForm);
           this.showNotification('Product added successfully!');
         }
-        this.productForm = { id: null, name: '', sku: '', price: 0, category_id: '' };
+        this.productForm = { id: null, name: '', sku: '', price: 0, whole_price: 0, category_id: '' };
         this.editingProduct = false;
         this.fetchProducts();
       } catch {
@@ -265,7 +325,7 @@ export default {
       this.editingProduct = true;
     },
     cancelProductEdit() {
-      this.productForm = { id: null, name: '', sku: '', price: 0, category_id: '' };
+      this.productForm = { id: null, name: '', sku: '', price: 0, whole_price: 0, category_id: '' };
       this.editingProduct = false;
     },
     async deleteProduct(id) {
@@ -279,7 +339,7 @@ export default {
       }
     },
 
-    // --- Search (live, debounced, local + fallback API) ---
+    // --- Search ---
     async searchProducts() {
       clearTimeout(this.searchTimeout);
       this.searchTimeout = setTimeout(async () => {
@@ -288,22 +348,15 @@ export default {
           this.products = this.allProducts;
           return;
         }
-
-        // local filter
         const localResults = this.allProducts.filter(
-          (p) =>
-            p.name.toLowerCase().includes(query) ||
-            p.sku.toLowerCase().includes(query)
+          p => p.name.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query)
         );
-
         if (localResults.length) {
           this.products = localResults;
         } else {
           try {
             this.loading = true;
-            const res = await api.get('/inventory/products/search', {
-              params: { query },
-            });
+            const res = await api.get('/inventory/products/search', { params: { query } });
             this.products = res.data;
           } catch {
             this.showNotification('Search failed.');
@@ -324,12 +377,13 @@ export default {
     exportPDF() {
       const doc = new jsPDF();
       doc.autoTable({
-        head: [['ID', 'Name', 'SKU', 'Price', 'Category', 'Stock qty']],
+        head: [['ID', 'Name', 'SKU', 'Price', 'Wholesale Price','Category', 'Stock qty']],
         body: this.products.map((p) => [
           p.id,
           p.name,
           p.sku,
           this.formatPrice(p.price),
+          this.formatPrice(p.whole_price),
           this.getCategoryName(p.category_id),
           p.quantity ?? 0,
         ]),

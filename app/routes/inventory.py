@@ -18,6 +18,7 @@ def add_product():
         category_id=data.get('category_id'),
         quantity=0,  # always start at 0
         price=data.get('price', 0),
+        whole_price=data.get('whole_price', 0),
         status=1,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
@@ -42,6 +43,7 @@ def list_products():
             "category_name": category.name if category else None,
             "quantity": p.quantity,
             "price": p.price,
+            "whole_price": p.whole_price,
             "status": p.status,
             "created_at": p.created_at,
             "updated_at": p.updated_at
@@ -65,6 +67,7 @@ def get_product(id):
         "quantity": p.quantity,
         "price": p.price,
         "status": p.status,
+        "whole_price": p.whole_price,
         "created_at": p.created_at,
         "updated_at": p.updated_at
     })
@@ -100,6 +103,7 @@ def search_product():
             "category_id": p.category_id,
             "category_name": category.name if category else None,
             "quantity": p.quantity,
+            "whole_price": p.whole_price,
             "price": p.price,
             "status": p.status,
             "created_at": p.created_at,
@@ -117,6 +121,7 @@ def update_product(id):
     product.name = data.get('name', product.name)
     product.sku = data.get('sku', product.sku)
     product.category_id = data.get('category_id', product.category_id)
+    product.whole_price = data.get('whole_price', product.whole_price)
     # product.quantity = data.get('quantity', product.quantity)  # removed
     product.price = data.get('price', product.price)
     product.updated_at = datetime.utcnow()
@@ -128,7 +133,7 @@ def update_product(id):
 @inventory_bp.route('/products/<int:id>', methods=['DELETE'])
 def delete_product(id):
     product = Product.query.get_or_404(id)
-    db.session.delete(product)
+    product.status = 9  # soft delete
     db.session.commit()
     return jsonify({"message": "Product deleted", "product_id": id})
 

@@ -40,6 +40,8 @@ class Product(db.Model, StatusMixin):
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     quantity = db.Column(db.Integer, default=0)
     price = db.Column(db.Float, default=0)
+    whole_price = db.Column(db.Float, default=0)
+
     # created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # ------------------ Suppliers & Purchase Orders ------------------
