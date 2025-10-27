@@ -1,12 +1,14 @@
 <template>
-  <div class="h-16 w-full bg-white shadow flex items-center justify-between px-6">
+  <header class="h-16 w-full bg-white/90 backdrop-blur-md shadow-lg flex items-center justify-between px-6 z-20 sticky top-0">
     <!-- Page Title -->
-    <div class="font-bold text-lg">{{ pageTitle }}</div>
+    <div class="font-bold text-lg text-gray-800">{{ pageTitle }}</div>
 
-    <!-- User Info & Logout -->
+    <!-- User Info & Actions -->
     <div class="flex items-center gap-4">
-      <!-- User Avatar Placeholder -->
-      <div class="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 font-bold">
+      <!-- User Avatar -->
+      <div
+        class="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold text-sm shadow-md"
+      >
         {{ userInitials }}
       </div>
 
@@ -16,10 +18,10 @@
         <span class="text-sm text-gray-500">{{ user.role }}</span>
       </div>
 
-      <!-- Profile Button (optional) -->
+      <!-- Profile Button -->
       <button
         @click="goToProfile"
-        class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
+        class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md text-sm transition"
       >
         Profile
       </button>
@@ -27,12 +29,12 @@
       <!-- Logout Button -->
       <button
         @click="logout"
-        class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+        class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm transition"
       >
         Logout
       </button>
     </div>
-  </div>
+  </header>
 </template>
 
 <script>
@@ -45,10 +47,8 @@ export default {
     const route = useRoute();
     const router = useRouter();
 
-    // --- Load user from localStorage ---
     const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-    // --- Generate initials for placeholder avatar ---
     const userInitials = computed(() => {
       if (!user.name) return '';
       return user.name
@@ -58,26 +58,24 @@ export default {
         .toUpperCase();
     });
 
-    // --- Dynamic page title ---
     const pageTitle = computed(() => {
-      switch (route.path) {
-        case '/': return 'Dashboard';
-        case '/products': return 'Products';
-        case '/customers': return 'Customers';
-        case '/sales': return 'Sales';
-        case '/supplier': return 'Supplier';
-        case '/purchases': return 'Purchases';
-        case '/reports': return 'Reports';
-        case '/expenses': return 'Expenses';
-        case '/users': return 'Users';
-        case '/purchaselist': return 'Purchase List';
-        case '/saleslist': return 'Sales List';
-        case '/accounts': return 'Accounts';
-        default: return '';
-      }
+      const titles = {
+        '/': 'Dashboard',
+        '/products': 'Products',
+        '/customers': 'Customers',
+        '/sales': 'Sales',
+        '/supplier': 'Supplier',
+        '/purchases': 'Purchases',
+        '/reports': 'Reports',
+        '/expenses': 'Expenses',
+        '/users': 'Users',
+        '/purchaselist': 'Purchase List',
+        '/saleslist': 'Sales List',
+        '/accounts': 'Accounts',
+      };
+      return titles[route.path] || '';
     });
 
-    // --- Logout function ---
     const logout = () => {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
@@ -87,7 +85,6 @@ export default {
       router.push('/login');
     };
 
-    // --- Go to profile page (optional) ---
     const goToProfile = () => {
       router.push('/profile');
     };
@@ -96,3 +93,16 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+header {
+  /* Optional subtle shadow for depth */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+button {
+  transition: all 0.2s ease-in-out;
+}
+button:hover {
+  transform: translateY(-1px);
+}
+</style>

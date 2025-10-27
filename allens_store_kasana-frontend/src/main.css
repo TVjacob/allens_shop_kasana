@@ -1,3 +1,71 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ------------------------------- */
+/* Animated Gradient Background */
+/* ------------------------------- */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.bg-animated-gradient {
+  background: linear-gradient(135deg, #6366f1, #ec4899, #8b5cf6);
+  background-size: 200% 200%;
+  animation: gradientShift 15s ease infinite;
+}
+
+/* ------------------------------- */
+/* Floating shapes / orbs */
+/* ------------------------------- */
+.floating-shape {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.25;
+  filter: blur(40px);
+  animation: float 10s ease-in-out infinite;
+}
+
+.shape-1 {
+  width: 250px;
+  height: 250px;
+  background: #6366f1;
+  top: 10%;
+  left: -10%;
+  animation-delay: 0s;
+}
+
+.shape-2 {
+  width: 200px;
+  height: 200px;
+  background: #ec4899;
+  bottom: 10%;
+  right: -10%;
+  animation-delay: 2s;
+}
+
+.shape-3 {
+  width: 150px;
+  height: 150px;
+  background: #8b5cf6;
+  top: 60%;
+  left: 50%;
+  animation-delay: 4s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-30px) scale(1.05);
+  }
+}
