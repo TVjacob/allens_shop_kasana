@@ -13,7 +13,7 @@
     <!-- 💎 Login Card -->
     <div class="relative bg-white/90 backdrop-blur-md p-8 rounded-2xl shadow-2xl w-full max-w-md z-10">
       <div class="text-center mb-8">
-        <h1 class="text-3xl font-extrabold text-indigo-700 drop-shadow-sm">Allen's Shop</h1>
+        <h1 class="text-3xl font-extrabold text-indigo-700 drop-shadow-sm">Allen's Store</h1>
         <p class="text-gray-600 text-sm">Kasana Branch Login</p>
       </div>
 
