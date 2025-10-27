@@ -72,6 +72,8 @@
           <th class="p-2 border">Product</th>
           <th class="p-2 border">Stock Qty</th>
           <th class="p-2 border">Unit</th>
+          <th class="p-2 border"> Retail</th>
+          <th class="p-2 border"> WholeSale</th>
           <th class="p-2 border">Unit Price</th>
           <th class="p-2 border">Quantity</th>
           <th class="p-2 border">Total Price</th>
@@ -98,6 +100,8 @@
           </td>
           <td class="p-2 border text-center">{{ item.stock_qty }}</td>
           <td class="p-2 border text-center">{{ item.unit }}</td>
+          <td class="p-2 border text-center">{{ formatPrice(item.unit_price || 0 ) }}</td>
+          <td class="p-2 border text-center">{{ formatPrice(item.whole_price|| 0) }}</td>
           <td class="p-2 border">
             <input
               type="number"
@@ -221,6 +225,10 @@ const selectPaymentAccountById = (id) => {
     saleHeader.value.payment_account = ''
   }
 }
+const formatPrice=(value)=> {
+  if (value == null) return '0';
+  return new Intl.NumberFormat('en-UG').format(value);
+    }
 
 // ---------- Product Logic ----------
 const debouncedSearchProduct = debounce(async (query, idx) => {
@@ -237,7 +245,8 @@ const debouncedSearchProduct = debounce(async (query, idx) => {
       name: p.name,
       stock_qty: p.quantity,
       unit: p.category_name || '',
-      price: p.price
+      price: p.price||0,
+      whole_price: p.whole_price||0,
     }))
   } finally {
     item.loading = false
@@ -257,6 +266,7 @@ const selectProduct = (id, idx) => {
   item.quantity = 0
   item.total_price = 0
   item.searchResults = []
+  item.whole_price=prod.whole_price
 }
 
 // ---------- Rows ----------

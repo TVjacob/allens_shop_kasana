@@ -53,9 +53,10 @@
         <tr class="bg-gray-100">
           <th class="p-2 border">Product</th>
           <th class="p-2 border">Stock</th>
+          <th class="p-2 border">Retail</th>
+          <th class="p-2 border">Whole Sale</th>
           <th class="p-2 border">Cost Price</th>
           <th class="p-2 border">Unit</th>
-
           <th class="p-2 border">Quantity</th>
           <th class="p-2 border">Total</th>
           <th class="p-2 border">Action</th>
@@ -83,6 +84,8 @@
           </td>
 
           <td class="p-2 border text-center">{{ item.stock_qty }}</td>
+          <td class="p-2 border text-center">{{formatPrice( item.retail_price )}}</td>
+          <td class="p-2 border text-center">{{ formatPrice(item.whole_price )}}</td>
 
           <td class="p-2 border">
             <input
@@ -235,6 +238,7 @@ const debouncedSearchProduct = debounce(async (query, idx) => {
       quantity: p.quantity ?? 0,
       category_name: p.category_name ?? '',
       price: p.price ?? 0,
+      whole_price:p.whole_price ?? 0,
     }))
   } catch (err) {
     console.error(err)
@@ -256,7 +260,9 @@ const onProductSelect = (id, idx) => {
     item.product_name = product.name
     item.stock_qty = product.quantity
     item.category_name = product.category_name
-    item.cost_price = product.price || 0
+    item.cost_price = 0
+    item.retail_price = product.price || 0
+    item.whole_price = product.whole_price || 0
     item.quantity = 0
     item.total_price = 0
   } else {
@@ -266,6 +272,8 @@ const onProductSelect = (id, idx) => {
     item.stock_qty = 0
     item.category_name = ''
     item.cost_price = 0
+    item.retail_price =  0
+    item.whole_price =  0
     item.quantity = 0
     item.total_price = 0
   }
@@ -297,6 +305,11 @@ const validateQuantity = (item) => {
 const calculateTotal = (item) => {
   item.total_price = (item.quantity || 0) * (item.cost_price || 0)
 }
+
+const formatPrice=(value)=> {
+  if (value == null) return '0';
+  return new Intl.NumberFormat('en-UG').format(value);
+    }
 
 // ----------------- Save PO -----------------
 const savePurchaseOrder = async () => {
