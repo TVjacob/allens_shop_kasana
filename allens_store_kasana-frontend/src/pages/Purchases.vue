@@ -271,7 +271,7 @@ const debouncedSearchProduct = debounce(async (query, idx) => {
     const res = await api.get('/inventory/products/search', { params: { name: query } })
     item.searchResults = res.data.map(p => ({
       id: p.id,
-      name: p.name,
+      name: p.name+' : '+p.category_name,
       stock_qty: p.quantity || 0,
     }))
   } catch (e) {
