@@ -25,6 +25,8 @@
             <th class="p-3 border-b text-left">Customer</th>
             <th class="p-3 border-b text-left">Type</th>
             <th class="p-3 border-b text-left">Product</th>
+            <th class="p-3 border-b text-left">Category</th>
+
             <!-- <th class="p-3 border-b text-left">Container</th> -->
             <th class="p-3 border-b text-left">Unit</th>
             <th class="p-3 border-b text-right">Issued</th>
@@ -54,7 +56,7 @@
               </span>
             </td>
             <td class="p-2 border">{{ entry.product_name }}</td>
-            <!-- <td class="p-2 border">{{ entry.container_name || '-' }}</td> -->
+            <td class="p-2 border">{{ entry.category_name || '-' }}</td>
             <td class="p-2 border">{{ entry.unit_name || '-' }}</td>
             <td class="p-2 border text-right">{{ entry.quantity_issued }}</td>
             <td class="p-2 border text-right">{{ entry.quantity_returned }}</td>

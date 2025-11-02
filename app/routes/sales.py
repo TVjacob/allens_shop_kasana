@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app import db
-from app.models import Account, BottleTransaction, ContainerTransaction, Customer, InventoryTransaction, Payment, Product, ProductUnit, PurchaseOrderItem, ReturnableContainer, Sale, SaleItem, GeneralLedger
+from app.models import Account, BottleTransaction, Category, ContainerTransaction, Customer, InventoryTransaction, Payment, Product, ProductUnit, PurchaseOrderItem, ReturnableContainer, Sale, SaleItem, GeneralLedger
 from app.utils.auth import token_required
 from app.utils.gl_utils import post_to_ledger, generate_transaction_number_partone,generate_transaction_number
 from datetime import datetime
@@ -1071,11 +1071,13 @@ def get_customer_returnable_summary():
 
         key = (customer.id, container.id)
         if key not in crate_summary:
+            category = db.session.query(Category).filter_by(id=product.category_id, status=1).first()
             crate_summary[key] = {
                 "type": "Crate",
                 "customer_id": customer.id,
                 "customer_name": customer.name,
                 "product_name": product.name,
+                "category_name":category.name,
                 "container_name": container.name,
                 "quantity_issued": 0,
                 "quantity_returned": 0,
@@ -1112,12 +1114,17 @@ def get_customer_returnable_summary():
 
         key = (customer.id, product_unit.id)
         if key not in bottle_summary:
+            category = db.session.query(Category).filter_by(id=product.category_id, status=1).first()
+
             bottle_summary[key] = {
                 "type": "Bottle",
                 "customer_id": customer.id,
                 "customer_name": customer.name,
                 "product_name": product.name,
+                "category_name":category.name,
+
                 "unit_name": product_unit.unit_name,
+
                 "container_name": container.name if container else None,
                 "quantity_issued": 0,
                 "quantity_returned": 0,
