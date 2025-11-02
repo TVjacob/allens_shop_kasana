@@ -35,6 +35,9 @@ import Acoa from '@/pages/reports/Acoa.vue';
 import Accounts from '@/pages/Accounts.vue';
 import BalanceSheet from '@/pages/reports/BalanceSheet.vue';
 import UserProfile from '@/pages/UserProfile.vue';
+import CustomeReturns from '@/pages/CustomeReturns.vue';
+import ReturnablesForm from '@/pages/ReturnablesForm.vue';
+import SalesProfitLoss from '@/pages/reports/SalesProfitLoss.vue';
 
 const routes = [
   {
@@ -75,7 +78,7 @@ const routes = [
       { path: 'reports/creditors-report', component: Creditor, meta: { showGreeting: false, pageName: 'Creditors Report',requiresAuth: true, } },
       { path: 'reports/balance-sheet', component: BalanceSheet, meta: { showGreeting: false, pageName: 'Balance Sheet',requiresAuth: true, } },
       { path: 'reports/chart-of-accounts', component: Acoa, meta: { showGreeting: false, pageName: 'chart-of-accounts',requiresAuth: true, } },
-
+      { path: '/enter_returnables', component: ReturnablesForm, meta: { showGreeting: false, pageName: 'Enter Returnables',requiresAuth: true, } },
       { path: 'reports/purchases-list', component: PurchaseReport, meta: { showGreeting: false, pageName: 'Purchases Report',requiresAuth: true, } },
       { path: 'reports/sales-list', component: SalesList, meta: { showGreeting: false, pageName: 'Sales Report',requiresAuth: true, } },
       { path: 'reports/performance-list', component: Performance, meta: { showGreeting: false, pageName: 'Performance Report',requiresAuth: true, } },
@@ -100,6 +103,20 @@ const routes = [
         component: UserProfile,
         meta: { showGreeting: false, pageName: 'User Profile', requiresAuth: true,}
       },
+      {
+        path: '/customereturns',
+        name: 'Customer Returns',
+        component: CustomeReturns,
+        meta: { showGreeting: false, pageName: 'Customer Returns', requiresAuth: true,}
+      },
+      {
+        path:'/reports/sales-profit-list',
+        name:'Sales Profit',
+        component: SalesProfitLoss,
+        meta: { showGreeting: false, pageName: 'Sales Profit', requiresAuth: true,}
+
+      }
+        
       
       
     ],

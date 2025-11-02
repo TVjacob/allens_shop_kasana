@@ -36,6 +36,7 @@ const stockReports = computed(() =>
 const salesReports = computed(() =>
   [
     { title: "Sales List", link: "/reports/sales-list", permission: "view_sales" },
+    { title: "Sales Profit", link: "/reports/sales-profit-list", permission: "view_sales" },
     { title: "Purchases List", link: "/reports/purchases-list", permission: "view_purchases" },
   ].filter(r => canView(r.permission))
 );

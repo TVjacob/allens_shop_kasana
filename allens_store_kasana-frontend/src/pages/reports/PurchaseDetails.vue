@@ -39,6 +39,8 @@
             <thead>
               <tr class="bg-gray-200">
                 <th class="p-2 border">Product</th>
+                <th class="p-2 border">Category</th>
+                <th class="p-2 border">Unit</th>
                 <th class="p-2 border">Quantity</th>
                 <th class="p-2 border">Unit Price</th>
                 <th class="p-2 border">Total Price</th>
@@ -47,6 +49,9 @@
             <tbody>
               <tr v-for="item in purchaseOrder.items" :key="item.product_id">
                 <td class="p-2 border">{{ item.product_name }}</td>
+                <td class="p-2 border">{{ item.category }}</td>
+                <td class="p-2 border">{{ item.unit_name }}</td>
+
                 <td class="p-2 border">{{ item.quantity }}</td>
                 <td class="p-2 border">{{ formatCurrency(item.unit_price) }}</td>
                 <td class="p-2 border">{{ formatCurrency(item.total_price) }}</td>

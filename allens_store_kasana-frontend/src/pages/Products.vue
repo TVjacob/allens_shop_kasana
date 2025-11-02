@@ -10,131 +10,154 @@
 
     <!-- ---------------- Products Tab ---------------- -->
     <div v-if="activeTab==='products'" class="animate-fadeIn">
+
       <!-- Add/Edit Product Form -->
-      <form @submit.prevent="submitProduct" class="mb-6 flex flex-wrap gap-4 items-start bg-white p-6 rounded-xl shadow">
-
-        <!-- Product Name -->
-        <div class="flex flex-col flex-1 min-w-[200px]">
-          <label class="mb-1 font-medium text-gray-700">Product Name</label>
-          <input 
-            v-model="productForm.name" 
-            type="text"
-            placeholder="Enter product name" 
-            class="input placeholder-gray-400" 
-            required 
-          />
+      <form @submit.prevent="submitProduct" class="mb-6 bg-white p-6 rounded-2xl shadow-md space-y-6">
+        <div class="grid md:grid-cols-3 gap-4">
+          <div>
+            <label class="label">Product Name</label>
+            <input v-model="productForm.name" class="input" placeholder="Enter name" required />
+          </div>
+          <div>
+            <label class="label">Track No / SKU</label>
+            <input v-model="productForm.sku" class="input" placeholder="Enter SKU" required />
+          </div>
+          <div>
+            <label class="label">Category</label>
+            <select v-model="productForm.category_id" class="input" required>
+              <option value="">Select Category</option>
+              <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+            </select>
+          </div>
         </div>
 
-        <!-- SKU -->
-        <div class="flex flex-col flex-1 min-w-[150px]">
-          <label class="mb-1 font-medium text-gray-700">Track No / SKU</label>
-          <input 
-            v-model="productForm.sku" 
-            type="text"
-            placeholder="Enter track number or SKU" 
-            class="input placeholder-gray-400" 
-            required 
-          />
-        </div>
+        <!-- Product Units Section -->
+        <div class="bg-gradient-to-b from-gray-50 to-white border rounded-2xl p-6 mt-4 shadow-sm">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">🧾 Product Units</h2>
+            <button type="button" @click="addUnit" class="px-4 py-1.5 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-sm">
+              + Add Unit
+            </button>
+          </div>
 
-        <!-- Price -->
-        <div class="flex flex-col flex-1 min-w-[120px]">
-          <label class="mb-1 font-medium text-gray-700">Price (UGX)</label>
-          <input 
-            v-model.number="productForm.price" 
-            type="number" 
-            min="1"
-            placeholder="Price" 
-            class="input placeholder-gray-400" 
-          />
-        </div>
+          <div v-if="productForm.units.length === 0" class="text-gray-500 italic text-sm bg-gray-50 p-4 rounded-lg">
+            No units added yet. Click “+ Add Unit” to begin.
+          </div>
 
-        <!-- Whole Price -->
-        <div class="flex flex-col flex-1 min-w-[120px]">
-          <label class="mb-1 font-medium text-gray-700">Wholesale Price (UGX)</label>
-          <input 
-            v-model.number="productForm.whole_price" 
-            type="number" 
-            min="0"
-            placeholder="Wholesale Price" 
-            class="input placeholder-gray-400" 
-          />
-        </div>
-
-        <!-- Category -->
-        <div class="flex flex-col flex-1 min-w-[150px]">
-          <label class="mb-1 font-medium text-gray-700">Category</label>
-          <select v-model="productForm.category_id" class="input">
-            <option disabled value="">Select Category</option>
-            <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-          </select>
-        </div>
-
-        <!-- Buttons -->
-        <div class="flex gap-2 items-end">
-          <button :disabled="loading" class="btn-primary">
-            {{ editingProduct ? 'Update' : 'Add' }} Product
-          </button>
-          <button
-            v-if="editingProduct"
-            type="button"
-            @click="cancelProductEdit"
-            class="btn-secondary"
+          <div
+            v-for="(unit, index) in productForm.units"
+            :key="index"
+            class="grid md:grid-cols-5 gap-4 mb-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm transition hover:shadow-md"
           >
-            Cancel
-          </button>
+            <div>
+              <label class="label">Unit Name</label>
+              <input v-model="unit.unit_name" placeholder="e.g. Bottle, Box, Crate" class="input" required />
+            </div>
+
+            <div>
+              <label class="label">Qty per Base</label>
+              <input v-model.number="unit.conversion_quantity" type="number" min="1" placeholder="1" class="input" required />
+            </div>
+
+            <div>
+              <label class="label">Retail Price (UGX)</label>
+              <input v-model.number="unit.retail_price" type="number" placeholder="UGX 0" class="input" />
+            </div>
+
+            <div>
+              <label class="label">Wholesale Price (UGX)</label>
+              <input v-model.number="unit.wholesale_price" type="number" placeholder="UGX 0" class="input" />
+            </div>
+
+            <div>
+              <label class="label">Cost Price for  shell or bottle</label>
+              <input v-model.number="unit.cost_price" type="number" placeholder="UGX 0" class="input" />
+            </div>
+
+            <div class="flex flex-col items-center justify-center col-span-1 md:col-span-1">
+              <label class="label text-center">is it returnable</label>
+              <div class="flex items-center gap-2">
+                <input type="checkbox" v-model="unit.is_returnable" class="scale-125 accent-blue-600" />
+                <button type="button" @click="removeUnit(index)" class="btn-sm bg-red-500 hover:bg-red-600">✕</button>
+              </div>
+            </div>
+          </div>
         </div>
 
+        <div class="flex gap-3 mt-4">
+          <button class="btn-primary" :disabled="loading">{{ editingProduct ? 'Update Product' : 'Add Product' }}</button>
+          <button v-if="editingProduct" type="button" @click="cancelProductEdit" class="btn-secondary">Cancel</button>
+        </div>
       </form>
 
-      <!-- Search Product -->
-      <div class="mb-6 flex gap-3 flex-wrap items-center">
-        <input
-          v-model="searchQuery"
-          placeholder="Search by name or SKU"
-          @input="searchProducts"
-          class="input flex-1"
-        />
+      <!-- Search -->
+      <div class="flex flex-wrap gap-3 mb-4">
+        <input v-model="searchQuery" @input="searchProducts" class="input flex-1" placeholder="Search by name or SKU" />
         <button @click="fetchProducts" class="btn-gray">Reset</button>
-        <button @click="exportExcel" class="btn-warning">Export Excel</button>
-        <button @click="exportPDF" class="btn-danger">Export PDF</button>
       </div>
 
-      <div v-if="loading" class="text-gray-600 text-center py-6">Loading products...</div>
-
       <!-- Products Table -->
-      <div v-else class="overflow-x-auto rounded-xl shadow bg-white">
+      <div class="overflow-x-auto bg-white rounded-2xl shadow">
         <table class="min-w-full border-collapse text-sm">
-          <thead>
-            <tr class="bg-gray-100 text-gray-700">
-              <th class="th">ID</th>
+          <thead class="bg-gray-100 text-gray-700">
+            <tr>
               <th class="th">Name</th>
               <th class="th">SKU</th>
-              <th class="th">Price</th>
-              <th class="th">Wholesale Price</th>
               <th class="th">Category</th>
-              <th class="th">Stock Qty</th>
-              <th class="th">Actions</th>
+              <th class="th text-center">Units</th>
+              <th class="th text-center">Stock</th>
+              <th class="th text-center">Purchase Price</th>
+
+
+              <th class="th text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="product in products"
-              :key="product.id"
-              class="hover:bg-blue-50 transition"
-            >
-              <td class="td text-center">{{ product.id }}</td>
-              <td class="td font-medium">{{ product.name }}</td>
-              <td class="td">{{ product.sku }}</td>
-              <td class="td">{{ formatPrice(product.price) }}</td>
-              <td class="td">{{ formatPrice(product.whole_price) }}</td>
-              <td class="td">{{ getCategoryName(product.category_id) }}</td>
-              <td class="td text-center">{{ product.quantity ?? 0 }}</td>
-              <td class="td text-center">
-                <button @click="editProduct(product)" class="btn-sm bg-blue-500 hover:bg-blue-600">Edit</button>
-                <button @click="deleteProduct(product.id)" class="btn-sm bg-red-500 hover:bg-red-600">Delete</button>
-              </td>
-            </tr>
+            <template v-for="product in products" :key="product.id">
+              <tr class="hover:bg-blue-50 cursor-pointer" @click="toggleExpand(product.id)">
+                <td class="td font-medium">{{ product.name }}</td>
+                <td class="td">{{ product.sku }}</td>
+                <td class="td">{{ getCategoryName(product.category_id) }}</td>
+                <td class="td text-center">{{ product.units?.length ?? 0 }}</td>
+                <td class="td text-center">{{ product.quantity ?? 0 }}</td>
+                <td class="td text-center">{{ formatPrice(product.last_purchase_price ?? 0 )}}</td>
+
+                <td class="td text-center">
+                  <button @click.stop="editProduct(product)" class="btn-sm bg-blue-500 hover:bg-blue-600">Edit</button>
+                  <button @click.stop="deleteProduct(product.id)" class="btn-sm bg-red-500 hover:bg-red-600">Delete</button>
+                </td>
+              </tr>
+
+              <!-- Expandable Units Row -->
+              <tr v-if="expandedProduct === product.id">
+                <td colspan="5" class="bg-gray-50 p-4 rounded-b-xl">
+                  <h3 class="font-semibold text-gray-700 mb-2">Units & Containers:</h3>
+                  <div class="grid md:grid-cols-5 gap-4">
+                    <div v-for="u in product.units" :key="u.id" class="p-3 bg-white rounded-xl shadow-sm border border-gray-200">
+                      <div class="font-medium text-gray-800">{{ u.unit_name }}</div>
+                      <div class="text-gray-600 text-sm">Qty/Base: <span class="font-semibold">{{ u.conversion_quantity }}</span></div>
+                      <div class="text-gray-600 text-sm">Retail: <span class="font-semibold text-green-600">{{ formatPrice(u.retail_price) }}</span></div>
+                      <div class="text-gray-600 text-sm">Wholesale: <span class="font-semibold text-blue-600">{{ formatPrice(u.wholesale_price) }}</span></div>
+                      <div class="text-gray-600 text-sm">Cost: <span class="font-semibold">{{ formatPrice(u.cost_price) }}</span></div>
+                      <div class="text-gray-600 text-sm">Refundable: 
+                        <span class="font-semibold" :class="u.is_returnable ? 'text-green-600' : 'text-red-600'">
+                          {{ u.is_returnable ? '✔️' : '❌' }}
+                        </span>
+                      </div>
+
+                      <div v-if="u.containers && u.containers.length > 0" class="mt-2">
+                        <div class="font-semibold text-gray-700 mb-1">Containers:</div>
+                        <ul class="text-sm text-gray-600 list-disc list-inside">
+                          <li v-for="c in u.containers" :key="c.id">
+                            {{ c.name }} - In Stock: {{ c.total_in_stock || 0 }}
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -142,36 +165,23 @@
 
     <!-- ---------------- Categories Tab ---------------- -->
     <div v-if="activeTab==='categories'" class="animate-fadeIn">
-      <!-- Add/Edit Category Form -->
-      <form @submit.prevent="submitCategory" class="flex gap-3 flex-wrap mb-4 bg-white p-4 rounded-xl shadow">
+      <form @submit.prevent="submitCategory" class="flex gap-3 flex-wrap mb-4 bg-white p-4 rounded-2xl shadow">
         <input v-model="categoryForm.name" placeholder="Category Name" class="input" required />
-        <button :disabled="loading" class="btn-primary">
-          {{ editingCategory ? 'Update' : 'Add' }} Category
-        </button>
-        <button
-          v-if="editingCategory"
-          type="button"
-          @click="cancelCategoryEdit"
-          class="btn-secondary"
-        >
-          Cancel
-        </button>
+        <button :disabled="loading" class="btn-primary">{{ editingCategory ? 'Update' : 'Add' }} Category</button>
+        <button v-if="editingCategory" type="button" @click="cancelCategoryEdit" class="btn-secondary">Cancel</button>
       </form>
 
-      <div v-if="loading" class="text-gray-600 text-center py-6">Loading categories...</div>
-
-      <!-- Categories Table -->
-      <div v-else class="overflow-x-auto rounded-xl shadow bg-white">
+      <div class="overflow-x-auto bg-white rounded-2xl shadow">
         <table class="min-w-full border-collapse text-sm">
-          <thead>
-            <tr class="bg-gray-100 text-gray-700">
+          <thead class="bg-gray-100 text-gray-700">
+            <tr>
               <th class="th">ID</th>
               <th class="th">Name</th>
-              <th class="th">Actions</th>
+              <th class="th text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="cat in categories" :key="cat.id" class="hover:bg-blue-50 transition">
+            <tr v-for="cat in categories" :key="cat.id" class="hover:bg-blue-50">
               <td class="td text-center">{{ cat.id }}</td>
               <td class="td">{{ cat.name }}</td>
               <td class="td text-center">
@@ -186,10 +196,7 @@
 
     <!-- Notification -->
     <transition name="fade">
-      <div
-        v-if="notification"
-        class="fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm"
-      >
+      <div v-if="notification" class="fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
         {{ notification }}
       </div>
     </transition>
@@ -198,23 +205,19 @@
 
 <script>
 import api from '../api';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 export default {
   data() {
     return {
       activeTab: 'products',
       products: [],
-      allProducts: [],
       categories: [],
-      productForm: { id: null, name: '', sku: '', price: 0, whole_price: 0, category_id: '' },
+      productForm: { id: null, name: '', sku: '', category_id: '', units: [] },
       editingProduct: false,
       categoryForm: { id: null, name: '' },
       editingCategory: false,
+      expandedProduct: null,
       searchQuery: '',
-      searchTimeout: null,
       loading: false,
       notification: '',
     };
@@ -223,7 +226,7 @@ export default {
     tabClass(tab) {
       return `px-4 py-2 rounded-t-lg font-semibold transition ${
         this.activeTab === tab
-          ? 'bg-blue-500 text-white shadow'
+          ? 'bg-blue-600 text-white shadow'
           : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
       }`;
     },
@@ -232,55 +235,20 @@ export default {
       setTimeout(() => (this.notification = ''), duration);
     },
 
-    // --- Categories ---
-    async fetchCategories() {
-      try {
-        this.loading = true;
-        const res = await api.get('/inventory/categories');
-        this.categories = res.data;
-      } catch {
-        this.showNotification('Failed to load categories.');
-      } finally {
-        this.loading = false;
-      }
+    // --- Units ---
+    addUnit() {
+      this.productForm.units.push({
+        unit_name: '',
+        conversion_quantity: 1,
+        retail_price: 0,
+        wholesale_price: 0,
+        cost_price: 0,
+        is_returnable: false,
+        containers: [],
+      });
     },
-    async submitCategory() {
-      try {
-        this.loading = true;
-        if (!this.categoryForm.name.trim()) return this.showNotification('Category name is required.');
-        if (this.editingCategory) {
-          await api.put(`/inventory/categories/${this.categoryForm.id}`, this.categoryForm);
-          this.showNotification('Category updated successfully!');
-        } else {
-          await api.post('/inventory/categories', this.categoryForm);
-          this.showNotification('Category added successfully!');
-        }
-        this.categoryForm = { id: null, name: '' };
-        this.editingCategory = false;
-        this.fetchCategories();
-      } catch {
-        this.showNotification('Error saving category.');
-      } finally {
-        this.loading = false;
-      }
-    },
-    editCategory(cat) {
-      this.categoryForm = { ...cat };
-      this.editingCategory = true;
-    },
-    cancelCategoryEdit() {
-      this.categoryForm = { id: null, name: '' };
-      this.editingCategory = false;
-    },
-    async deleteCategory(id) {
-      if (!confirm('Delete this category?')) return;
-      try {
-        await api.delete(`/inventory/categories/${id}`);
-        this.showNotification('Category deleted.');
-        this.fetchCategories();
-      } catch {
-        this.showNotification('Failed to delete category.');
-      }
+    removeUnit(index) {
+      this.productForm.units.splice(index, 1);
     },
 
     // --- Products ---
@@ -289,7 +257,6 @@ export default {
         this.loading = true;
         const res = await api.get('/inventory/products');
         this.products = res.data;
-        this.allProducts = res.data;
       } catch {
         this.showNotification('Failed to load products.');
       } finally {
@@ -299,20 +266,17 @@ export default {
     async submitProduct() {
       if (!this.productForm.name.trim()) return this.showNotification('Product name is required.');
       if (!this.productForm.sku.trim()) return this.showNotification('SKU is required.');
-      if (this.productForm.price <= 0) return this.showNotification('Enter a valid price.');
       if (!this.productForm.category_id) return this.showNotification('Select a category.');
-
       try {
         this.loading = true;
         if (this.editingProduct) {
           await api.put(`/inventory/products/${this.productForm.id}`, this.productForm);
           this.showNotification('Product updated successfully!');
         } else {
-          await api.post('/inventory/products', this.productForm);
+          await api.post(`/inventory/products`, this.productForm);
           this.showNotification('Product added successfully!');
         }
-        this.productForm = { id: null, name: '', sku: '', price: 0, whole_price: 0, category_id: '' };
-        this.editingProduct = false;
+        this.cancelProductEdit();
         this.fetchProducts();
       } catch {
         this.showNotification('Error saving product.');
@@ -321,11 +285,11 @@ export default {
       }
     },
     editProduct(product) {
-      this.productForm = { ...product };
+      this.productForm = JSON.parse(JSON.stringify(product));
       this.editingProduct = true;
     },
     cancelProductEdit() {
-      this.productForm = { id: null, name: '', sku: '', price: 0, whole_price: 0, category_id: '' };
+      this.productForm = { id: null, name: '', sku: '', category_id: '', units: [] };
       this.editingProduct = false;
     },
     async deleteProduct(id) {
@@ -338,65 +302,63 @@ export default {
         this.showNotification('Failed to delete product.');
       }
     },
-
-    // --- Search ---
-    async searchProducts() {
-      clearTimeout(this.searchTimeout);
-      this.searchTimeout = setTimeout(async () => {
-        const query = this.searchQuery.trim().toLowerCase();
-        if (!query) {
-          this.products = this.allProducts;
-          return;
-        }
-        const localResults = this.allProducts.filter(
-          p => p.name.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query)
-        );
-        if (localResults.length) {
-          this.products = localResults;
-        } else {
-          try {
-            this.loading = true;
-            const res = await api.get('/inventory/products/search', { params: { query } });
-            this.products = res.data;
-          } catch {
-            this.showNotification('Search failed.');
-          } finally {
-            this.loading = false;
-          }
-        }
-      }, 300);
+    toggleExpand(id) {
+      this.expandedProduct = this.expandedProduct === id ? null : id;
     },
 
-    // --- Excel / PDF ---
-    exportExcel() {
-      const ws = XLSX.utils.json_to_sheet(this.products);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Products');
-      XLSX.writeFile(wb, 'products.xlsx');
+    // --- Categories ---
+    async fetchCategories() {
+      const res = await api.get('/inventory/categories');
+      this.categories = res.data;
     },
-    exportPDF() {
-      const doc = new jsPDF();
-      doc.autoTable({
-        head: [['ID', 'Name', 'SKU', 'Price', 'Wholesale Price','Category', 'Stock qty']],
-        body: this.products.map((p) => [
-          p.id,
-          p.name,
-          p.sku,
-          this.formatPrice(p.price),
-          this.formatPrice(p.whole_price),
-          this.getCategoryName(p.category_id),
-          p.quantity ?? 0,
-        ]),
-      });
-      doc.save('products.pdf');
+    async submitCategory() {
+      if (!this.categoryForm.name.trim()) return;
+      if (this.editingCategory)
+        await api.put(`/inventory/categories/${this.categoryForm.id}`, this.categoryForm);
+      else await api.post('/inventory/categories', this.categoryForm);
+      this.categoryForm = { id: null, name: '' };
+      this.editingCategory = false;
+      this.fetchCategories();
+    },
+    editCategory(cat) {
+      this.categoryForm = { ...cat };
+      this.editingCategory = true;
+    },
+    cancelCategoryEdit() {
+      this.categoryForm = { id: null, name: '' };
+      this.editingCategory = false;
+    },
+    async deleteCategory(id) {
+      if (!confirm('Delete this category?')) return;
+      await api.delete(`/inventory/categories/${id}`);
+      this.fetchCategories();
     },
 
-    formatPrice(value) {
-      return new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX' }).format(value);
+    // formatPrice(v) {
+    //   return new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX' }).format(v || 0);
+    // },
+    formatPrice(v) {
+  const value = Number(v) || 0;
+  return new Intl.NumberFormat('en-UG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value);
+},
+
+    getCategoryName(id) {
+      const c = this.categories.find((x) => x.id === id);
+      return c ? c.name : '';
     },
-    getCategoryName(catId) {
-      const cat = this.categories.find((c) => c.id === catId);
-      return cat ? cat.name : '';
+
+    searchProducts() {
+      const query = this.searchQuery.trim().toLowerCase();
+      if (!query) {
+        this.fetchProducts();
+        return;
+      }
+      this.products = this.products.filter(
+        p => p.name.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query)
+      );
     },
   },
   mounted() {
@@ -407,46 +369,53 @@ export default {
 </script>
 
 <style scoped>
+.label {
+  @apply text-gray-700 font-semibold text-sm mb-1 block;
+}
 .input {
-  @apply border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:outline-none transition;
+  @apply border border-gray-300 rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition;
 }
 .btn-primary {
-  @apply bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow;
+  @apply bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all shadow;
 }
 .btn-secondary {
-  @apply bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition shadow;
-}
-.btn-warning {
-  @apply bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition shadow;
-}
-.btn-danger {
-  @apply bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition shadow;
+  @apply bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-all shadow;
 }
 .btn-gray {
-  @apply bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition shadow;
+  @apply bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-all shadow-sm;
 }
 .btn-sm {
-  @apply text-white text-xs px-3 py-1 rounded shadow transition;
+  @apply text-white text-xs px-3 py-1 rounded-lg shadow hover:opacity-90 transition;
 }
 .th {
-  @apply p-2 border font-semibold text-left;
+  @apply border p-2 text-left font-semibold text-gray-700 bg-gray-50;
 }
 .td {
-  @apply p-2 border text-gray-800;
+  @apply border p-2 text-gray-800;
 }
+
+/* Table & hover effects */
+table {
+  @apply w-full border border-gray-200 rounded-xl overflow-hidden;
+}
+tr:hover td {
+  @apply bg-blue-50 transition;
+}
+
+/* Animations */
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-in-out;
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.fade-enter-active,
-.fade-leave-active {
+
+/* Notification */
+.fade-enter-active, .fade-leave-active {
   transition: opacity 0.3s;
 }
-.fade-enter-from,
-.fade-leave-to {
+.fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
 </style>

@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify
-from app.models import AccountTypeEnum, Category, GeneralLedger, SaleItem, PurchaseOrder, Expense,Customer, Supplier, Sale, PurchaseOrder, Product, Account
+from app.models import AccountTypeEnum, Category, GeneralLedger, ProductUnit, PurchaseOrderItem, SaleItem, PurchaseOrder, Expense,Customer, Supplier, Sale, PurchaseOrder, Product, Account
 from app import db
-from sqlalchemy import func
+from sqlalchemy import desc, func
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload
 
@@ -99,27 +99,7 @@ def general_ledger():
         "data": result
     })
 
-# # ------------------ Trial Balance ------------------
-# @token_required
-# @reports_bp.route('/trial-balance', methods=['GET'])
-# def trial_balance():
-#     # Group by account
-#     accounts = db.session.query(
-#         Account.id,
-#         Account.name,
-#         Account.account_type,
-#         func.coalesce(func.sum(GeneralLedger.amount), 0).label('balance')
-#     ).join(GeneralLedger, GeneralLedger.account_id == Account.id).filter(GeneralLedger.status != 9).group_by(Account.id).all()
-
-#     result = [{
-#         "account_id": a.id,
-#         "account_name": a.name,
-#         "account_type": a.account_type,
-#         "balance": float(a.balance)
-#     } for a in accounts]
-
-#     return jsonify(result)
-
+#
 # ------------------ Trial Balance (Professional) ------------------
 # from flask import Blueprint, jsonify, request
 # from sqlalchemy import func, case
@@ -1138,132 +1118,6 @@ def profit_loss_professional():
     })
 
 
-# @token_required
-# @reports_bp.route('/profit-loss-periodic', methods=['GET'])
-# def profit_loss_periodic():
-#     """
-#     Returns a nested Profit & Loss report grouped by year and month.
-#     Handles parent-child aggregation and computes monthly totals:
-#     total_revenue, total_expenses, net_profit.
-#     Supports optional start_date and end_date filters.
-#     """
-#     # ------------------ Date filters ------------------
-#     start_date_str = request.args.get('start_date')
-#     end_date_str = request.args.get('end_date')
-
-#     filters = [GeneralLedger.status != 9]
-
-#     if start_date_str:
-#         try:
-#             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-#             filters.append(GeneralLedger.transaction_date >= start_date)
-#         except ValueError:
-#             return jsonify({"error": "start_date must be YYYY-MM-DD"}), 400
-
-#     if end_date_str:
-#         try:
-#             end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-#             filters.append(GeneralLedger.transaction_date <= end_date)
-#         except ValueError:
-#             return jsonify({"error": "end_date must be YYYY-MM-DD"}), 400
-
-#     # ------------------ Fetch accounts with balances by month ------------------
-#     from sqlalchemy import extract
-
-#     records = db.session.query(
-#         Account.id.label('account_id'),
-#         Account.name.label('account_name'),
-#         Account.account_type,
-#         Account.account_subtype,
-#         Account.parent_id,
-#         extract('year', GeneralLedger.transaction_date).label('year'),
-#         extract('month', GeneralLedger.transaction_date).label('month'),
-#         func.coalesce(func.sum(GeneralLedger.amount), 0).label('balance')
-#     ).outerjoin(GeneralLedger, GeneralLedger.account_id == Account.id) \
-#      .filter(Account.status != 9, Account.account_type.in_([AccountTypeEnum.REVENUE, AccountTypeEnum.EXPENSE]), *filters) \
-#      .group_by(Account.id, extract('year', GeneralLedger.transaction_date), extract('month', GeneralLedger.transaction_date)) \
-#      .order_by('year', 'month').all()
-
-#     # ------------------ Build hierarchical structure ------------------
-#     from collections import defaultdict
-
-#     monthly_data = defaultdict(list)
-#     account_dict = {}
-
-#     for r in records:
-#         key = f"{int(r.year) if r.year else 'Unknown'}-{int(r.month):02d}" if r.year and r.month else "Unknown"
-#         if r.account_id not in account_dict:
-#             account_dict[r.account_id] = {
-#                 "id": r.account_id,
-#                 "name": r.account_name,
-#                 "type": r.account_type.value if hasattr(r.account_type, 'value') else str(r.account_type),
-#                 "subtype": r.account_subtype.value if hasattr(r.account_subtype, 'value') else str(r.account_subtype),
-#                 "balance": float(r.balance),
-#                 "children": [],
-#                 "parent_id": r.parent_id
-#             }
-#         else:
-#             account_dict[r.account_id]["balance"] += float(r.balance)
-
-#         monthly_data[key].append(account_dict[r.account_id])
-
-#     # ------------------ Build nested hierarchy and sum children ------------------
-#     def build_hierarchy(accounts):
-#         acc_map = {a["id"]: dict(a, children=[]) for a in accounts}
-#         roots = []
-
-#         for acc in acc_map.values():
-#             if acc["parent_id"] and acc["parent_id"] in acc_map:
-#                 acc_map[acc["parent_id"]]["children"].append(acc)
-#             else:
-#                 roots.append(acc)
-
-#         # Recursive sum of children
-#         def sum_children(acc):
-#             for child in acc["children"]:
-#                 acc["balance"] += sum_children(child)
-#             return acc["balance"]
-
-#         for root in roots:
-#             sum_children(root)
-
-#         return roots
-
-#     # ------------------ Compute totals per month ------------------
-#     final_response = {}
-#     for period, accounts in monthly_data.items():
-#         hierarchy = build_hierarchy(accounts)
-
-#         total_revenue = 0.0
-#         total_expenses = 0.0
-
-#         def accumulate_totals(acc):
-#             nonlocal total_revenue, total_expenses
-#             if acc["type"] == "REVENUE":
-#                 total_revenue += acc["balance"]
-#             elif acc["type"] == "EXPENSE":
-#                 total_expenses += acc["balance"]
-#             for child in acc["children"]:
-#                 accumulate_totals(child)
-
-#         for root_acc in hierarchy:
-#             accumulate_totals(root_acc)
-
-#         final_response[period] = {
-#             "accounts": hierarchy,
-#             "total_revenue": round(total_revenue, 2),
-#             "total_expenses": round(total_expenses, 2),
-#             "net_profit": round(total_revenue - total_expenses, 2)
-#         }
-
-#     return jsonify({
-#         "period_filter": {
-#             "start_date": start_date_str if start_date_str else None,
-#             "end_date": end_date_str if end_date_str else None
-#         },
-#         "data": final_response
-#     })
-
 @token_required
 @reports_bp.route('/profit-loss-periodic', methods=['GET'])
 def profit_loss_periodic():
@@ -1383,159 +1237,6 @@ def profit_loss_periodic():
         "data": final_response
     })
 
-# @token_required
-# @reports_bp.route('/profit-loss-ytd', methods=['GET'])
-# def profit_loss_ytd():
-#     """
-#     Returns a nested Profit & Loss report grouped by year and month,
-#     with parent accounts summing children.
-#     Includes monthly totals, annual totals, and cumulative YTD profit for each month.
-#     Supports optional start_date and end_date filters.
-#     """
-#     from sqlalchemy import extract
-#     from collections import defaultdict
-
-#     # ------------------ Date filters ------------------
-#     start_date_str = request.args.get('start_date')
-#     end_date_str = request.args.get('end_date')
-
-#     filters = [GeneralLedger.status != 9]
-
-#     if start_date_str:
-#         try:
-#             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-#             filters.append(GeneralLedger.transaction_date >= start_date)
-#         except ValueError:
-#             return jsonify({"error": "start_date must be YYYY-MM-DD"}), 400
-
-#     if end_date_str:
-#         try:
-#             end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-#             filters.append(GeneralLedger.transaction_date <= end_date)
-#         except ValueError:
-#             return jsonify({"error": "end_date must be YYYY-MM-DD"}), 400
-
-#     # ------------------ Fetch accounts with balances by month ------------------
-#     records = db.session.query(
-#         Account.id.label('account_id'),
-#         Account.name.label('account_name'),
-#         Account.account_type,
-#         Account.account_subtype,
-#         Account.parent_id,
-#         extract('year', GeneralLedger.transaction_date).label('year'),
-#         extract('month', GeneralLedger.transaction_date).label('month'),
-#         func.coalesce(func.sum(GeneralLedger.amount), 0).label('balance')
-#     ).outerjoin(GeneralLedger, GeneralLedger.account_id == Account.id) \
-#      .filter(Account.status != 9,
-#              Account.account_type.in_([AccountTypeEnum.REVENUE, AccountTypeEnum.EXPENSE]),
-#              *filters) \
-#      .group_by(Account.id, extract('year', GeneralLedger.transaction_date), extract('month', GeneralLedger.transaction_date)) \
-#      .order_by('year', 'month').all()
-
-#     # ------------------ Build hierarchical structure ------------------
-#     monthly_data = defaultdict(list)
-#     account_dict = {}
-
-#     for r in records:
-#         key = f"{int(r.year) if r.year else 'Unknown'}-{int(r.month):02d}" if r.year and r.month else "Unknown"
-#         if r.account_id not in account_dict:
-#             account_dict[r.account_id] = {
-#                 "id": r.account_id,
-#                 "name": r.account_name,
-#                 "type": r.account_type.value if hasattr(r.account_type, 'value') else str(r.account_type),
-#                 "subtype": r.account_subtype.value if hasattr(r.account_subtype, 'value') else str(r.account_subtype),
-#                 "balance": float(r.balance),
-#                 "children": [],
-#                 "parent_id": r.parent_id
-#             }
-#         else:
-#             account_dict[r.account_id]["balance"] += float(r.balance)
-
-#         monthly_data[key].append(account_dict[r.account_id])
-
-#     # ------------------ Build nested hierarchy and sum children ------------------
-#     def build_hierarchy(accounts):
-#         acc_map = {a["id"]: dict(a, children=[]) for a in accounts}
-#         roots = []
-
-#         for acc in acc_map.values():
-#             if acc["parent_id"] and acc["parent_id"] in acc_map:
-#                 acc_map[acc["parent_id"]]["children"].append(acc)
-#             else:
-#                 roots.append(acc)
-
-#         # Recursive sum of children
-#         def sum_children(acc):
-#             for child in acc["children"]:
-#                 acc["balance"] += sum_children(child)
-#             return acc["balance"]
-
-#         for root in roots:
-#             sum_children(root)
-
-#         return roots
-
-#     # ------------------ Compute totals per month, annual totals, and YTD ------------------
-#     final_response = {}
-#     annual_totals = defaultdict(lambda: {"total_revenue": 0.0, "total_expenses": 0.0, "net_profit": 0.0})
-#     ytd_totals = defaultdict(lambda: 0.0)  # year -> cumulative net profit
-
-#     # Sort periods chronologically for YTD calculation
-#     sorted_periods = sorted(monthly_data.keys())
-
-#     for period in sorted_periods:
-#         accounts = monthly_data[period]
-#         hierarchy = build_hierarchy(accounts)
-
-#         total_revenue = 0.0
-#         total_expenses = 0.0
-
-#         def accumulate_totals(acc):
-#             nonlocal total_revenue, total_expenses
-#             if acc["type"] == "REVENUE":
-#                 total_revenue += acc["balance"]
-#             elif acc["type"] == "EXPENSE":
-#                 total_expenses += acc["balance"]
-#             for child in acc["children"]:
-#                 accumulate_totals(child)
-
-#         for root_acc in hierarchy:
-#             accumulate_totals(root_acc)
-
-#         net_profit = total_revenue - total_expenses
-
-#         year = int(period.split("-")[0]) if period != "Unknown" else "Unknown"
-
-#         # Update annual totals
-#         annual_totals[year]["total_revenue"] += total_revenue
-#         annual_totals[year]["total_expenses"] += total_expenses
-#         annual_totals[year]["net_profit"] += net_profit
-
-#         # Update YTD profit
-#         ytd_totals[year] += net_profit
-
-#         final_response[period] = {
-#             "accounts": hierarchy,
-#             "total_revenue": round(total_revenue, 2),
-#             "total_expenses": round(total_expenses, 2),
-#             "net_profit": round(net_profit, 2),
-#             "ytd_profit": round(ytd_totals[year], 2)
-#         }
-
-#     # Round annual totals
-#     for year, totals in annual_totals.items():
-#         totals["total_revenue"] = round(totals["total_revenue"], 2)
-#         totals["total_expenses"] = round(totals["total_expenses"], 2)
-#         totals["net_profit"] = round(totals["net_profit"], 2)
-
-#     return jsonify({
-#         "period_filter": {
-#             "start_date": start_date_str if start_date_str else None,
-#             "end_date": end_date_str if end_date_str else None
-#         },
-#         "monthly_data": final_response,
-#         "annual_totals": annual_totals
-#     })
 @token_required
 @reports_bp.route('/profit-loss-ytd', methods=['GET'])
 def profit_loss_ytd():
@@ -1666,108 +1367,6 @@ def profit_loss_ytd():
         }
     })
 
-
-# from sqlalchemy import case, func
-
-# @token_required
-# @reports_bp.route("/balance-sheet", methods=["GET"])
-# def balance_sheet_report():
-#     """
-#     Professional Balance Sheet Report
-#     ---------------------------------
-#     - Groups by AccountType (ASSET, LIABILITY, EQUITY)
-#     - Subtotals by account_subtype
-#     - Supports ?as_of=YYYY-MM-DD
-#     - Checks that Assets = Liabilities + Equity
-#     """
-
-#     # --- Date filter ---
-#     as_of_str = request.args.get("as_of")
-#     as_of = datetime.strptime(as_of_str, "%Y-%m-%d") if as_of_str else datetime.utcnow()
-
-#     # --- Base query ---
-#     query = (
-#         db.session.query(
-#             Account.account_type,
-#             Account.account_subtype,
-#             Account.id.label("account_id"),
-#             Account.name.label("account_name"),
-#             func.coalesce(
-#                 func.sum(
-#                     case(
-#                         (GeneralLedger.transaction_type == "DEBIT", GeneralLedger.amount),
-#                         else_=-GeneralLedger.amount
-#                     )
-#                 ), 0
-#             ).label("balance")
-#         )
-#         .join(GeneralLedger, GeneralLedger.account_id == Account.id)
-#         .filter(GeneralLedger.transaction_date <= as_of, Account.status != 9)
-#         .group_by(Account.account_type, Account.account_subtype, Account.id, Account.name)
-#         .order_by(Account.account_type, Account.account_subtype, Account.name)
-#     )
-
-#     results = query.all()
-
-#     # --- Organize report ---
-#     balance_sheet = {
-#         "ASSET": {},
-#         "LIABILITY": {},
-#         "EQUITY": {}
-#     }
-
-#     for row in results:
-#         type_key = row.account_type.value  # Enum to string
-#         subtype_key = row.account_subtype or "Uncategorized"
-
-#         if type_key not in balance_sheet:
-#             continue  # Skip Revenue/Expense
-
-#         if subtype_key not in balance_sheet[type_key]:
-#             balance_sheet[type_key][subtype_key] = []
-
-#         balance_sheet[type_key][subtype_key].append({
-#             "account_id": row.account_id,
-#             "account_name": row.account_name,
-#             "balance": float(row.balance)
-#         })
-
-#     # --- Calculate totals per subtype & major section ---
-#     totals = {}
-#     for section, subtypes in balance_sheet.items():
-#         totals[section] = {
-#             "subtotals": {},
-#             "total": 0.0
-#         }
-
-#         for subtype, accounts in subtypes.items():
-#             subtotal = round(sum(a["balance"] for a in accounts), 2)
-#             totals[section]["subtotals"][subtype] = subtotal
-#             totals[section]["total"] += subtotal
-
-#         totals[section]["total"] = round(totals[section]["total"], 2)
-
-#     # --- Accounting equation check ---
-#     total_assets = totals.get("ASSET", {}).get("total", 0)
-#     total_liabilities = totals.get("LIABILITY", {}).get("total", 0)
-#     total_equity = totals.get("EQUITY", {}).get("total", 0)
-
-#     balance_check = round(total_assets - (total_liabilities + total_equity), 2)
-
-#     # --- Final JSON response ---
-#     return jsonify({
-#         "as_of": as_of.strftime("%Y-%m-%d"),
-#         "sections": balance_sheet,
-#         "totals": totals,
-#         "summary": {
-#             "total_assets": total_assets,
-#             "total_liabilities": total_liabilities,
-#             "total_equity": total_equity,
-#             "assets_minus_liabilities_equity": balance_check,
-#             "is_balanced": balance_check == 0
-#         }
-#     })
-# ---------------------------------------
 # ---------------------------------------
 @token_required
 @reports_bp.route("/balance-sheet", methods=["GET"])
@@ -1868,3 +1467,322 @@ def balance_sheet_report():
         }
     })
 
+
+@token_required
+@reports_bp.route("/sales", methods=["GET"])
+def sales_report():
+    """
+    Returns sales report for a given date range.
+    Includes profit/loss per sale, customer details, category/unit info,
+    and indicates outstanding balances.
+    Optionally filters by customer_id or category.
+    """
+
+    # --- Parse filters ---
+    start_date_str = request.args.get("start_date")
+    end_date_str = request.args.get("end_date")
+    customer_id = request.args.get("customer_id", type=int)
+    category_id = request.args.get("category_id", type=int)
+
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d") if start_date_str else None
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d") if end_date_str else None
+    except ValueError:
+        return jsonify({"error": "Dates must be in YYYY-MM-DD format"}), 400
+
+    # --- Base filters ---
+    filters = [Sale.status != 9]
+    if start_date:
+        filters.append(Sale.sale_date >= start_date)
+    if end_date:
+        filters.append(Sale.sale_date <= end_date)
+    if customer_id:
+        filters.append(Sale.customer_id == customer_id)
+
+    # --- Fetch all sales ---
+    sales = (
+        db.session.query(Sale)
+        .options(joinedload(Sale.items), joinedload(Sale.customer))
+        .filter(*filters)
+        .order_by(Sale.sale_date.desc())
+        .all()
+    )
+
+    report_data = []
+    total_sales = total_profit = total_balance = total_cost = total_paid = 0
+
+    for sale in sales:
+        # --- Compute totals ---
+        total_amount = sum(item.total_price for item in sale.items if item.status != 9)
+        total_paid_amount = sale.total_paid or 0
+        balance = total_amount - total_paid_amount
+
+        total_cost_price = 0
+        total_profit_loss = 0
+        sale_items_data = []
+
+        for item in sale.items:
+            if item.status == 9:
+                continue
+
+            product = Product.query.get(item.product_id)
+            if not product:
+                continue
+
+            category_name = None
+            if product.category_id:
+                category = db.session.query(Category).filter_by(id=product.category_id, status=1).first()
+                if category:
+                    category_name = category.name
+
+            # --- Get product unit info ---
+            unit_name = None
+            conversion_qty = 1
+            is_returnable = False
+            if item.unit_id:
+                unit = ProductUnit.query.get(item.unit_id)
+                if unit:
+                    unit_name = unit.unit_name
+                    conversion_qty = unit.conversion_quantity or 1
+                    is_returnable = unit.is_returnable  # Assuming you have this column
+
+            # --- Convert quantity back to base unit if returnable ---
+            actual_qty = item.quantity
+            if is_returnable:
+                actual_qty = item.quantity * conversion_qty
+            
+            # --- Get last purchase price for this product/unit ---
+            last_purchase = (
+                PurchaseOrderItem.query
+                .filter(
+                    PurchaseOrderItem.product_id == product.id,
+                    PurchaseOrderItem.status == 1,
+                    # Optional: filter by unit_id if needed
+                    PurchaseOrderItem.unit_id == item.unit_id if item.unit_id else True
+                )
+                .order_by(PurchaseOrderItem.created_at.desc())
+                .first()
+            )
+            last_purchase_price = float(last_purchase.unit_price or 0) if last_purchase else 0
+
+            # last_purchase_price= last_purchase_price/conversion_qty
+
+
+            # last_purchase_price = last_purchase.unit_price if last_purchase else 0
+            
+
+            unit_cost = round(last_purchase_price or 0)
+            
+            unit_selling = float(item.unit_price or 0)
+
+            profit = (unit_selling - unit_cost) * actual_qty
+            cost_value = unit_cost * actual_qty
+
+            total_cost_price += cost_value
+            total_profit_loss += profit
+
+            sale_items_data.append({
+                "product_id": product.id,
+                "product_name": product.name,
+                "category": category_name,
+                "unit_name": unit_name,
+                "quantity": item.quantity,
+                "converted_quantity": actual_qty,
+                "unit_price": unit_selling,
+                "cost_price": unit_cost,
+                "total_price": item.total_price,
+                "profit": profit
+            })
+
+        # --- Customer info ---
+        customer_name = sale.customer.name if sale.customer else "Walk-in Customer"
+        customer_phone = getattr(sale.customer, "phone", "")
+
+        # --- Prepare sale entry ---
+        sale_entry = {
+            "sale_id": sale.id,
+            "sale_number": sale.sale_number,
+            "sale_date": sale.sale_date.strftime("%Y-%m-%d"),
+            "customer_name": customer_name,
+            "customer_phone": customer_phone,
+            "total_amount": round(total_amount, 2),
+            "total_cost": round(total_cost_price, 2),
+            "profit_loss": round(total_profit_loss, 2),
+            "amount_paid": round(total_paid_amount, 2),
+            "balance": round(balance, 2),
+            "status": sale.payment_status,
+            "items": sale_items_data
+        }
+
+        # Optional filter by category (post-filter)
+        if category_id:
+            if not any(
+                Product.query.get(i["product_id"]).category_id == category_id for i in sale_items_data
+            ):
+                continue
+
+        report_data.append(sale_entry)
+
+        # --- Accumulate totals ---
+        total_sales += total_amount
+        total_profit += total_profit_loss
+        total_balance += balance
+        total_cost += total_cost_price
+        total_paid += total_paid_amount
+
+    # --- Summary totals ---
+    summary = {
+        "total_sales": round(total_sales, 2),
+        "total_cost": round(total_cost, 2),
+        "total_profit_loss": round(total_profit, 2),
+        "total_paid": round(total_paid, 2),
+        "total_balance": round(total_balance, 2),
+    }
+
+    return jsonify({
+        "period": {
+            "start_date": start_date_str,
+            "end_date": end_date_str
+        },
+        "sales_count": len(report_data),
+        "summary": summary,
+        "data": report_data
+    })
+
+
+
+@token_required
+@reports_bp.route("/sales-profit-loss", methods=["GET"])
+def sales_profit_loss():
+    """
+    Returns aggregated Profit & Loss report over a period.
+    Summarizes total sales, total cost, total profit/loss, and balances.
+    Optionally filtered by customer_id or category_id.
+    """
+
+    # --- Parse filters ---
+    start_date_str = request.args.get("start_date")
+    end_date_str = request.args.get("end_date")
+    customer_id = request.args.get("customer_id", type=int)
+    category_id = request.args.get("category_id", type=int)
+
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d") if start_date_str else None
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d") if end_date_str else None
+    except ValueError:
+        return jsonify({"error": "Dates must be in YYYY-MM-DD format"}), 400
+
+    # --- Base filters ---
+    filters = [Sale.status != 9]
+    if start_date:
+        filters.append(Sale.sale_date >= start_date)
+    if end_date:
+        filters.append(Sale.sale_date <= end_date)
+    if customer_id:
+        filters.append(Sale.customer_id == customer_id)
+
+    # --- Fetch sales ---
+    sales = (
+        db.session.query(Sale)
+        .options(joinedload(Sale.items), joinedload(Sale.customer))
+        .filter(*filters)
+        .order_by(Sale.sale_date.desc())
+        .all()
+    )
+
+    # --- Initialize totals ---
+    total_sales = total_cost = total_profit = total_balance = total_paid = 0
+    report_items = []
+
+    for sale in sales:
+        sale_total_amount = 0
+        sale_total_cost = 0
+        sale_total_profit = 0
+        sale_balance = 0
+
+        for item in sale.items:
+            if item.status == 9:
+                continue
+
+            product = Product.query.get(item.product_id)
+            if not product:
+                continue
+
+            # Optional category filter
+            if category_id and product.category_id != category_id:
+                continue
+
+            # --- Product unit info ---
+            conversion_qty = 1
+            is_returnable = False
+            if item.unit_id:
+                unit = ProductUnit.query.get(item.unit_id)
+                if unit:
+                    conversion_qty = unit.conversion_qty or 1
+                    is_returnable = unit.is_returnable
+
+            # --- Adjust quantity ---
+            actual_qty = item.quantity
+            if is_returnable and conversion_qty > 1:
+                actual_qty = item.quantity * conversion_qty
+
+            # --- Last purchase price ---
+            last_purchase = (
+                PurchaseOrderItem.query
+                .filter(
+                    PurchaseOrderItem.product_id == product.id,
+                    PurchaseOrderItem.status == 1,
+                    PurchaseOrderItem.unit_id == item.unit_id if item.unit_id else True
+                )
+                .order_by(PurchaseOrderItem.created_at.desc())
+                .first()
+            )
+            last_purchase_price = float(last_purchase.unit_price or 0) if last_purchase else 0
+            last_purchase_price = last_purchase_price / conversion_qty if conversion_qty > 1 else last_purchase_price
+
+            # --- Cost & Profit ---
+            unit_selling = float(item.unit_price or 0)
+            cost_value = last_purchase_price * actual_qty
+            profit_value = (unit_selling - last_purchase_price) * actual_qty
+
+            sale_total_amount += item.total_price
+            sale_total_cost += cost_value
+            sale_total_profit += profit_value
+
+        sale_total_paid = sale.total_paid or 0
+        sale_balance = sale_total_amount - sale_total_paid
+
+        total_sales += sale_total_amount
+        total_cost += sale_total_cost
+        total_profit += sale_total_profit
+        total_paid += sale_total_paid
+        total_balance += sale_balance
+
+        # Record per-sale summary
+        report_items.append({
+            "sale_id": sale.id,
+            "sale_number": sale.sale_number,
+            "sale_date": sale.sale_date.strftime("%Y-%m-%d"),
+            "customer": sale.customer.name if sale.customer else "Walk-in",
+            "total_sales": round(sale_total_amount, 2),
+            "total_cost": round(sale_total_cost, 2),
+            "profit_loss": round(sale_total_profit, 2),
+            "amount_paid": round(sale_total_paid, 2),
+            "balance": round(sale_balance, 2)
+        })
+
+    # --- Final summary ---
+    summary = {
+        "total_sales": round(total_sales, 2),
+        "total_cost": round(total_cost, 2),
+        "total_profit_loss": round(total_profit, 2),
+        "total_paid": round(total_paid, 2),
+        "total_balance": round(total_balance, 2)
+    }
+
+    return jsonify({
+        "period": {"start_date": start_date_str, "end_date": end_date_str},
+        "sales_count": len(report_items),
+        "summary": summary,
+        "sales": report_items
+    })

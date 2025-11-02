@@ -261,6 +261,12 @@ export default {
     addItem() {
       this.expenseForm.items.push({ account_name: "", account_id: null, item_name: "", description: "", amount: 0 });
     },
+        // Close expense item modal
+    closeItemModal() {
+      this.expenseItemForm = { name: "", account_subtype: "" };
+      this.showItemModal = false;
+      // this.removeEscapeListener();
+    },
     removeItem(index) {
       this.expenseForm.items.splice(index, 1);
     },
@@ -329,6 +335,32 @@ export default {
         alert("Failed to submit expense. " + (err.response?.data?.error || err.message));
       }
     },
+    async submitExpenseItem() {
+  if (!this.expenseItemForm.name.trim() || !this.expenseItemForm.account_subtype) {
+    alert("Expense Item Name and Type are required!");
+    return;
+  }
+
+  try {
+    const payload = {
+      name: this.expenseItemForm.name.trim(),
+      account_subtype: this.expenseItemForm.account_subtype
+    };
+
+    const res = await api.post("/accounts/expense-items", payload);
+    alert(`✅ Expense Item "${this.expenseItemForm.name}" created successfully!`);
+
+    // Refresh expense accounts list so the new item can be selected
+    await this.fetchExpenseAccounts();
+
+    // Close the modal and reset form
+    this.closeItemModal();
+  } catch (err) {
+    console.error("❌ Error creating expense item:", err);
+    alert("Failed to create expense item. " + (err.response?.data?.error || err.message));
+  }
+},
+
     editExpense(expense) {
       this.expenseForm = {
         id: expense.id,

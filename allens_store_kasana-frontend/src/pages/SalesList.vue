@@ -32,6 +32,8 @@
         <thead class="bg-gray-100 text-gray-700 sticky top-0">
           <tr>
             <th class="p-3 border-b text-left">Sale ID</th>
+            <th class="p-3 border-b text-left">Customer </th>
+
             <th class="p-3 border-b text-left">Sale Number</th>
             <th class="p-3 border-b text-left">Sale Date</th>
             <th class="p-3 border-b text-right">Total Amount</th>
@@ -48,6 +50,8 @@
             class="hover:bg-gray-50 transition cursor-pointer"
           >
             <td class="p-2 border">{{ sale.sale_id }}</td>
+            <td class="p-2 border">{{ sale.customer.name }}</td>
+
             <td class="p-2 border">{{ sale.sale_number }}</td>
             <td class="p-2 border">{{ formatDate(sale.sale_date) }}</td>
             <td class="p-2 border text-right">{{ formatCurrency(sale.total_amount) }}</td>

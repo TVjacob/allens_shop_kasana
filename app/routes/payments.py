@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 from app import db
-from app.models import Account, Payment, Sale, GeneralLedger
+from app.models import Account, Category, Payment, Product, ProductUnit, Sale, GeneralLedger
 from app.utils.auth import token_required
 from app.utils.gl_utils import post_to_ledger, generate_transaction_number
 from sqlalchemy.orm import joinedload
@@ -229,84 +229,173 @@ def delete_payment(payment_id):
 
 
 
+# def get_sale_details(sale_id, doc_type='invoice'):
+#     """
+#     Fetch and return complete sale details for Invoice or Receipt.
+#     """
+#     sale = (
+#         Sale.query
+#         .options(joinedload(Sale.items), joinedload(Sale.customer))
+#         .filter(Sale.id==sale_id, Sale.status.in_([1, 4,3]))
+#         .first()
+#     )
+
+#     if not sale:
+#         return {"error": "Sale not found"}
+
+#     # Total amount for sale items
+#     total_amount = sum(item.total_price for item in sale.items if item.status != 9)
+
+#     # Total amount paid
+#     total_paid = db.session.query(db.func.coalesce(db.func.sum(Payment.amount), 0)) \
+#                             .filter(Payment.sale_id == sale.id).scalar()
+
+#     balance = total_amount - total_paid
+#     change = abs(balance) if balance < 0 else 0
+
+#     # Item details
+#     item_details = [
+#         {
+#             "product_name": item.product_name,
+#             "quantity": item.quantity,
+#             "unit_price": item.unit_price,
+#             "total_price": item.total_price
+#         }
+#         for item in sale.items if item.status == 1
+#     ]
+
+#     # Payment history
+#     payment_history = [
+#         {
+#             "date": payment.payment_date.strftime('%Y-%m-%d %H:%M:%S'),
+#             "amount": payment.amount,
+#             "type": payment.payment_type,
+#             "account_id": payment.payment_account_id,
+#             "payment_account": Account.query.filter(Account.id == payment.payment_account_id).first().name if payment.payment_account_id else "",
+#             "reference": payment.reference
+#         }
+#         for payment in Payment.query.filter_by(sale_id=sale.id).order_by(Payment.payment_date).all()
+#     ]
+
+#     return {
+#         "document_type": doc_type.capitalize(),
+#         "sale_id": sale.id,
+#         "sale_number": sale.sale_number,
+#         "sale_date": sale.sale_date.strftime('%Y-%m-%d %H:%M:%S'),
+
+#         # Customer info
+#         "customer": {
+#             "name": sale.customer.name if sale.customer else "Walk-in",
+#             "phone": sale.customer.phone if sale.customer and sale.customer.phone else "",
+#             "email": sale.customer.email if sale.customer and sale.customer.email else "",
+#             "address": sale.customer.address if sale.customer and sale.customer.address else "",
+#         },
+
+#         # Items
+#         "items": item_details,
+
+#         # Payment history
+#         "payments": payment_history,
+
+#         # Totals
+#         "totals": {
+#             "grand_total": total_amount,
+#             "amount_paid": total_paid,
+#             "balance": balance if balance >= 0 else 0,
+#             "change": change
+#         },
+
+#         "status": sale.payment_status
+#     }
+# ------------------ Sale Details (Invoice / Receipt) ------------------
 def get_sale_details(sale_id, doc_type='invoice'):
     """
     Fetch and return complete sale details for Invoice or Receipt.
+    Includes product category, unit details, and payment breakdown.
     """
     sale = (
         Sale.query
         .options(joinedload(Sale.items), joinedload(Sale.customer))
-        .filter(Sale.id==sale_id, Sale.status.in_([1, 4,3]))
+        .filter(Sale.id == sale_id, Sale.status.in_([1, 3, 4]))
         .first()
     )
 
     if not sale:
-        return {"error": "Sale not found"}
+        return {"error": "Sale not found"}, 404
 
-    # Total amount for sale items
     total_amount = sum(item.total_price for item in sale.items if item.status != 9)
-
-    # Total amount paid
     total_paid = db.session.query(db.func.coalesce(db.func.sum(Payment.amount), 0)) \
-                            .filter(Payment.sale_id == sale.id).scalar()
-
+        .filter(Payment.sale_id == sale.id).scalar()
     balance = total_amount - total_paid
     change = abs(balance) if balance < 0 else 0
 
-    # Item details
-    item_details = [
-        {
-            "product_name": item.product_name,
+    item_details = []
+    for item in sale.items:
+        if item.status == 9:
+            continue
+        product = Product.query.get(item.product_id)
+        category_name, category_id = None, None
+        if product and product.category_id:
+            category = db.session.query(Category).filter_by(id=product.category_id, status=1).first()
+            if category:
+                category_name = category.name
+                category_id = category.id
+        unit_name = (
+            db.session.query(ProductUnit.unit_name)
+            .filter_by(id=item.unit_id)
+            .scalar()
+            if getattr(item, "unit_id", None) else None
+        )
+        item_details.append({
+            "product_id": item.product_id,
+            "product_name": item.product_name or (product.name if product else None),
+            "sku": product.sku if product else None,
+            "category_id": category_id,
+            "category": category_name,
+            "unit_id": getattr(item, "unit_id", None),
+            "unit_name": unit_name,
             "quantity": item.quantity,
             "unit_price": item.unit_price,
             "total_price": item.total_price
-        }
-        for item in sale.items if item.status == 1
-    ]
+        })
 
-    # Payment history
-    payment_history = [
-        {
-            "date": payment.payment_date.strftime('%Y-%m-%d %H:%M:%S'),
+    payments = Payment.query.filter_by(sale_id=sale.id).order_by(Payment.payment_date).all()
+    payment_history = []
+    for payment in payments:
+        acc = Account.query.get(payment.payment_account_id) if payment.payment_account_id else None
+        payment_history.append({
+            "date": payment.payment_date.strftime('%Y-%m-%d %H:%M:%S') if payment.payment_date else None,
             "amount": payment.amount,
             "type": payment.payment_type,
             "account_id": payment.payment_account_id,
-            "payment_account": Account.query.filter(Account.id == payment.payment_account_id).first().name if payment.payment_account_id else "",
+            "payment_account": acc.name if acc else None,
             "reference": payment.reference
-        }
-        for payment in Payment.query.filter_by(sale_id=sale.id).order_by(Payment.payment_date).all()
-    ]
+        })
 
-    return {
+    response = {
         "document_type": doc_type.capitalize(),
         "sale_id": sale.id,
         "sale_number": sale.sale_number,
-        "sale_date": sale.sale_date.strftime('%Y-%m-%d %H:%M:%S'),
-
-        # Customer info
+        "sale_date": sale.sale_date.strftime('%Y-%m-%d %H:%M:%S') if sale.sale_date else None,
         "customer": {
+            "id": sale.customer.id if sale.customer else None,
             "name": sale.customer.name if sale.customer else "Walk-in",
-            "phone": sale.customer.phone if sale.customer and sale.customer.phone else "",
-            "email": sale.customer.email if sale.customer and sale.customer.email else "",
-            "address": sale.customer.address if sale.customer and sale.customer.address else "",
+            "phone": getattr(sale.customer, "phone", ""),
+            "email": getattr(sale.customer, "email", ""),
+            "address": getattr(sale.customer, "address", "")
         },
-
-        # Items
         "items": item_details,
-
-        # Payment history
         "payments": payment_history,
-
-        # Totals
         "totals": {
             "grand_total": total_amount,
             "amount_paid": total_paid,
             "balance": balance if balance >= 0 else 0,
             "change": change
         },
-
         "status": sale.payment_status
     }
+    return jsonify(response)
+
 
 # ------------------ API ROUTE ------------------
 @token_required
@@ -317,13 +406,10 @@ def payment_details():
 
     if not sale_id:
         return jsonify({"error": "sale_id is required"}), 400
-
     if doc_type.lower() not in ['invoice', 'receipt']:
         return jsonify({"error": "Invalid type. Use 'invoice' or 'receipt'"}), 400
 
     result = get_sale_details(sale_id, doc_type)
-
-    if "error" in result:
-        return jsonify(result), 404
-
-    return jsonify(result), 200
+    if isinstance(result, tuple) and "error" in result[0]:
+        return jsonify(result[0]), 404
+    return result, 200

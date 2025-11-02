@@ -3,6 +3,9 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 import enum
 from sqlalchemy import Enum
+
+# from datetime import datetime
+from sqlalchemy import CheckConstraint
 # ------------------ Mixin for Status ------------------
 class StatusMixin:
     status = db.Column(db.Integer, default=1, nullable=False)  # 1 = Active, 0 = Inactive
@@ -43,6 +46,44 @@ class Product(db.Model, StatusMixin):
     whole_price = db.Column(db.Float, default=0)
 
     # created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+
+
+# class ProductUnit(db.Model, StatusMixin):
+#     __tablename__ = 'product_unit'
+
+#     id = db.Column(db.Integer, primary_key=True)
+#     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+
+#     # Name of the unit (Bottle, Dozen, Crate, etc.)
+#     unit_name = db.Column(db.String(50), nullable=False)
+
+#     # How many base units this represents (e.g. 1 crate = 12 bottles)
+#     conversion_quantity = db.Column(db.Float, default=1.0, nullable=False)
+
+#     # Prices specific to this unit
+#     retail_price = db.Column(db.Float, default=0.0)
+#     wholesale_price = db.Column(db.Float, default=0.0)
+
+#     # Whether the unit is refundable (e.g. bottles that can be returned)
+#     is_returnable = db.Column(db.Boolean, default=False)
+
+#     # Optional field for barcode or code unique per unit
+#     unit_code = db.Column(db.String(50), unique=False)
+
+#     # Relationship
+#     product = db.relationship('Product', backref=db.backref('units', lazy=True, cascade="all, delete-orphan"))
+
+#     def __repr__(self):
+#         return f"<ProductUnit {self.unit_name} of {self.product.name}>"
+
+#     def get_total_price(self, quantity):
+#         """Calculate total retail value for given quantity."""
+#         return self.retail_price * quantity
+
+
+
 
 # ------------------ Suppliers & Purchase Orders ------------------
 class Supplier(db.Model, StatusMixin):
@@ -92,13 +133,14 @@ class PurchaseOrderItem(db.Model, StatusMixin):
     total_price = db.Column(db.Float, default=0)  # quantity * unit_price
     status= db.Column(db.Integer, nullable=False,default=1)
     product = db.relationship('Product', backref='purchase_order_items', lazy=True)
+    unit_id = db.Column(db.Integer, db.ForeignKey('product_unit.id'), nullable=True)
 
     def __repr__(self):
         return f"<POItem ProductID={self.product_id} Qty={self.quantity}>"
 
     def calculate_total(self):
         """Update total_price based on quantity and unit_price."""
-        self.total_price = self.quantity * self.unit_price
+        self.total_price = round(self.quantity * self.unit_price)
 
 # class SupplierPayment(db.Model, StatusMixin):
 #     id = db.Column(db.Integer, primary_key=True)
@@ -186,6 +228,8 @@ class SaleItem(db.Model, StatusMixin):
 
     # Optional: Track which transaction added this item
     transaction_no = db.Column(db.Integer, db.ForeignKey('transaction_number.id'), nullable=True)
+    unit_id = db.Column(db.Integer, db.ForeignKey('product_unit.id'), nullable=True)
+
 
     # Relationship
     product = db.relationship('Product', backref='sale_items', lazy=True)
@@ -398,10 +442,18 @@ class RevenueSubtypeEnum(enum.Enum):
     SERVICE = "Service Revenue"
 
 class ExpenseSubtypeEnum(enum.Enum):
-    COGS = "Cost of Goods Sold"
+    COGS = "Cost of Goods Sold Expense"
     RENT = "Rent Expense"
     SALARIES = "Salaries Expense"
     UTILITIES = "Utilities Expense"
+    OFFICE_SUPPLIES ="Office Supplies Expense"
+    OTHER_EXPENSES="Other Expenses"
+    BANK_FEES ="Banks fees Expense"
+    ADVERTISING="Advertising Expense"
+    TRAINING ="Training Expense"
+    INTEREST ="Interest Expense"
+    TRAVEL ="Travel Expense"
+    TAXES= "Taxes Expense"
 
 
 # -------------------------------
@@ -440,3 +492,190 @@ class GeneralLedger(db.Model, StatusMixin):
     description = db.Column(db.String(200))
     transaction_date = db.Column(db.DateTime, default=datetime.utcnow)
     transaction_no = db.Column(db.Integer, db.ForeignKey('transaction_number.id'))
+
+
+class BottleTransaction(db.Model, StatusMixin):
+    __tablename__ = 'bottle_transaction'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Link to the crate/container and product unit
+    container_id = db.Column(db.Integer, db.ForeignKey('returnable_container.id'), nullable=True)
+    product_unit_id = db.Column(db.Integer, db.ForeignKey('product_unit.id'), nullable=False)
+
+    # Link to sale or purchase
+    sale_id = db.Column(db.Integer, db.ForeignKey('sale.id'), nullable=True)
+    purchase_order_id = db.Column(db.Integer, db.ForeignKey('purchase_order.id'), nullable=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
+
+    # Transaction info
+    transaction_type = db.Column(db.String(20), nullable=False)  # 'Issued', 'Returned', 'Damaged', 'Received', 'Sold'
+    quantity = db.Column(db.Integer, nullable=False, default=0)  # Number of bottles
+    unit_value = db.Column(db.Float, default=0.0)                # Cost per bottle
+    total_value = db.Column(db.Float, default=0.0)               # unit_value * quantity
+
+    # Store number of bottles sold
+    bottles_sold = db.Column(db.Integer, default=0)
+
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    container = db.relationship('ReturnableContainer', backref='bottle_transactions')
+    product_unit = db.relationship('ProductUnit')
+    sale = db.relationship('Sale', backref='bottle_transactions')
+    purchase_order = db.relationship('PurchaseOrder', backref='bottle_transactions')
+    customer = db.relationship('Customer', backref='bottle_transactions')
+
+    def __repr__(self):
+        return f"<BottleTransaction {self.transaction_type} {self.quantity} bottles from container {self.container_id}>"
+
+    def calculate_total_value(self):
+        self.total_value = self.quantity * self.unit_value
+        return self.total_value
+
+
+class ReturnableContainer(db.Model, StatusMixin):
+    __tablename__ = 'returnable_container'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)  # e.g., "Beer Crate"
+    description = db.Column(db.String(200))
+    unit_value = db.Column(db.Float, default=0.0)    # Cost per container
+
+    # Track stock
+    total_issued = db.Column(db.Integer, default=0)     # Issued to customers
+    total_returned = db.Column(db.Integer, default=0)   # Returned by customers
+    total_damaged = db.Column(db.Integer, default=0)    # Damaged containers
+    total_in_stock = db.Column(db.Integer, default=0)   # Current available stock
+
+    # Track total sold
+    total_sold = db.Column(db.Integer, default=0)       # Total crates/bottles sold
+
+    # Link to ProductUnit (foreign key is here)
+    product_unit_id = db.Column(db.Integer, db.ForeignKey('product_unit.id'), nullable=False)
+    product_unit = db.relationship('ProductUnit', back_populates='containers')
+
+    # Transactions
+    transactions = db.relationship('ContainerTransaction', backref='container', lazy=True)
+
+    __table_args__ = (
+        CheckConstraint('total_in_stock >= 0', name='check_total_in_stock_non_negative'),
+    )
+
+    def __repr__(self):
+        return f"<ReturnableContainer {self.name} for {self.product_unit.unit_name}>"
+
+    @property
+    def available_stock(self):
+        """
+        Returns the actual usable stock:
+        total_in_stock = issued - returned - damaged
+        """
+        return self.total_issued - self.total_returned - self.total_damaged
+
+    def process_transaction(self, transaction_type: str, quantity: int, sold: bool = False):
+        """
+        Update stock based on transaction type.
+        transaction_type: 'Issued', 'Returned', 'Received', 'Damaged', 'Purchased'
+        sold: True if this transaction is an actual sale
+        """
+        if transaction_type == 'Issued':
+            self.total_issued += quantity
+        elif transaction_type == 'Returned':
+            self.total_returned += quantity
+        elif transaction_type == 'Received':
+            self.total_in_stock += quantity
+        elif transaction_type == 'Damaged':
+            self.total_damaged += quantity
+        elif transaction_type == 'Purchased':
+            self.total_in_stock += quantity
+        elif transaction_type == "Sold":
+            self.total_sold +=quantity
+            # self.total_returned +=quantity
+        else:
+            raise ValueError(f"Invalid transaction type: {transaction_type}")
+
+        # if sold:
+        #     self.total_sold += quantity
+
+        # Ensure stock never goes negative
+        if self.total_in_stock < 0:
+            raise ValueError("Total in-stock cannot be negative after transaction")
+
+
+class ContainerTransaction(db.Model, StatusMixin):
+    __tablename__ = 'container_transaction'
+
+    id = db.Column(db.Integer, primary_key=True)
+    container_id = db.Column(db.Integer, db.ForeignKey('returnable_container.id'), nullable=False)
+
+    # Link to sale or purchase if applicable
+    sale_id = db.Column(db.Integer, db.ForeignKey('sale.id'), nullable=True)
+    purchase_order_id = db.Column(db.Integer, db.ForeignKey('purchase_order.id'), nullable=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
+
+    transaction_type = db.Column(
+        db.String(20),
+        nullable=False
+    )  # 'Issued', 'Returned', 'Received', 'Damaged','Purchased',"Sold"
+
+    quantity = db.Column(db.Integer, nullable=False)
+    unit_value = db.Column(db.Float, default=0.0)    # Cost per container
+    total_value = db.Column(db.Float, default=0.0)   # unit_value * quantity
+
+    # Track sold
+    sold_quantity = db.Column(db.Integer, default=0)
+
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    sale = db.relationship('Sale', backref='container_transactions')
+    purchase_order = db.relationship('PurchaseOrder', backref='container_transactions')
+    customer = db.relationship('Customer', backref='container_transactions')
+
+    def __repr__(self):
+        return f"<ContainerTransaction {self.transaction_type} {self.quantity} of Container {self.container_id}>"
+
+    def calculate_total_value(self):
+        self.total_value = self.quantity * self.unit_value
+        return self.total_value
+
+
+class ProductUnit(db.Model, StatusMixin):
+    __tablename__ = 'product_unit'
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+
+    # Name of the unit (Bottle, Dozen, Crate, etc.)
+    unit_name = db.Column(db.String(50), nullable=False)
+
+    # How many base units this represents (e.g., 1 crate = 12 bottles)
+    conversion_quantity = db.Column(db.Integer, default=1, nullable=False)
+
+    # Prices specific to this unit
+    retail_price = db.Column(db.Float, default=0.0)
+    wholesale_price = db.Column(db.Float, default=0.0)
+    cost_price = db.Column(db.Float, default=0.0)
+
+    # Whether the unit is refundable (e.g., crates or bottles that can be returned)
+    is_returnable = db.Column(db.Boolean, default=False)
+
+    # Optional barcode or code unique per unit
+    unit_code = db.Column(db.String(50), unique=False,nullable=True)
+
+    # Relationships
+    product = db.relationship(
+        'Product', 
+        backref=db.backref('units', lazy=True, cascade="all, delete-orphan")
+    )
+
+    # Link back to ReturnableContainers
+    containers = db.relationship('ReturnableContainer', back_populates='product_unit', lazy=True)
+
+    def __repr__(self):
+        return f"<ProductUnit {self.unit_name} of {self.product.name}>"
+
+    def get_total_price(self, quantity):
+        """Calculate total retail value for given quantity."""
+        return self.retail_price * quantity

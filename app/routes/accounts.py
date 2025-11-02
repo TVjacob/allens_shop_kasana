@@ -15,6 +15,10 @@ def enum_to_str(enum_val):
     return enum_val.value if isinstance(enum_val, enum.Enum) else enum_val
 
 def generate_account_code(account_type, last_code=None):
+    """
+    Generate next unique account code automatically based on type prefix.
+    Ensures code does not already exist in the database.
+    """
     type_prefix = {
         "ASSET": "1",
         "LIABILITY": "2",
@@ -23,15 +27,24 @@ def generate_account_code(account_type, last_code=None):
         "EXPENSE": "5"
     }.get(account_type.upper(), "9")
 
+    # from app.models import Account  # make sure Account is imported
+
+    # Start code generation
     if last_code:
         try:
-            last_num = int(last_code)
-            next_code = str(last_num + 10)
-        except:
-            next_code = type_prefix + "000"
+            next_num = int(last_code)
+        except ValueError:
+            next_num = int(type_prefix + "000")
     else:
-        next_code = type_prefix + "000"
-    return next_code
+        next_num = int(type_prefix + "000")
+
+    # Loop until a unique code is found
+    while True:
+        code_candidate = str(next_num)
+        exists = Account.query.filter_by(code=code_candidate).first()
+        if not exists:
+            return code_candidate
+        next_num += 10  # increment by 10 as before
 
 # -------------------------------
 # Routes with Permissions

@@ -67,6 +67,8 @@ export default {
         '/supplier': 'Supplier',
         '/purchases': 'Purchases',
         '/reports': 'Reports',
+        '/customereturns': 'Customer Returns',
+        '/enter_returnables': 'Enter Returnables',
         '/expenses': 'Expenses',
         '/users': 'Users',
         '/purchaselist': 'Purchase List',
