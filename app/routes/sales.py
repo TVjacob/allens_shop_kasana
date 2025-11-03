@@ -233,237 +233,6 @@ def create_sale():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-# @token_required
-# @sales_bp.route('/', methods=['POST'])
-# def create_sale():
-#     from app.models import ProductUnit  # Import inside to avoid circular import
-
-#     data = request.json
-#     items = data.get('items', [])
-#     amount_paid = data.get('amount_paid', 0)
-#     payment_account_id = data.get('payment_account_id')
-#     sale_date_str = data.get("sale_date")
-
-#     if not items:
-#         return jsonify({"error": "At least one item is required"}), 400
-
-#     # Parse sale_date
-#     try:
-#         sale_date = datetime.strptime(sale_date_str, "%Y-%m-%d") if sale_date_str else datetime.utcnow()
-#     except ValueError:
-#         return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
-
-#     # try:
-#     total_amount = 0
-#     cogs_total = 0
-#     txn_id, txn_str = generate_transaction_number_partone('INV', transaction_date=sale_date)
-
-#     # --- Create Sale record ---
-#     sale = Sale(
-#         sale_number=txn_str,
-#         customer_id=data.get("customer_id", 1),
-#         total_paid=amount_paid,
-#         status=1,
-#         sale_date=sale_date
-#     )
-#     db.session.add(sale)
-#     db.session.flush()
-
-#     # --- Process Sale Items ---
-#     for item_data in items:
-#         product_id = item_data.get("product_id")
-#         unit_id = item_data.get("unit_id")
-#         quantity = float(item_data.get("quantity", 0))
-#         unit_price = float(item_data.get("unit_price", 0))
-#         total_price = float(item_data.get("total_price", unit_price * quantity))
-
-#         if not product_id or not unit_id:
-#             raise ValueError("Product ID and Unit ID are required for each item")
-
-#         product = Product.query.get(product_id)
-#         if not product:
-#             raise ValueError(f"Product with ID {product_id} not found")
-
-#         unit = ProductUnit.query.get(unit_id)
-#         if not unit or unit.product_id != product.id:
-#             raise ValueError(f"Invalid unit {unit_id} for product {product.name}")
-
-#         # --- Compute consumption quantity based on unit conversion ---
-#         consumption_qty = quantity * unit.conversion_quantity
-
-#         # --- Check stock availability ---
-#         if product.quantity < consumption_qty:
-#             raise ValueError(f"Insufficient stock for {product.name}. Required {consumption_qty}, available {product.quantity}")
-
-#                     # --- Returnable container handling ---
-#         if unit.is_returnable:
-#             container = ReturnableContainer.query.filter_by(product_unit_id=unit.id).first()
-#             container_id =None
-#             if container:
-#                 # Update container stock
-#                 container.process_transaction('Issued', quantity)
-#                 db.session.add(container)
-#                 # --- Save ContainerTransaction ---
-#                 cont_txn = ContainerTransaction(
-#                     container_id=container.id,
-#                     sale_id=sale.id,
-#                     customer_id=sale.customer_id,
-#                     transaction_type='Issued',
-#                     quantity=quantity,
-#                     unit_value=unit.cost_price or 0,  # or container.unit_value if you prefer
-#                     status = 1,
-#                 )
-#                 cont_txn.calculate_total_value()  # sets total_value = quantity * unit_value
-#                 db.session.add(cont_txn)
-#                 container_id = container.id
-
-
-#             product_unit_bottle = ProductUnit.query.filter_by(product_id=product_id, conversion_quantity =1 ).first()
-#             # --- Save BottleTransaction ---
-#             bottle_txn = BottleTransaction(
-#                 container_id=container_id or None,
-#                 product_unit_id=unit.id,
-#                 sale_id=sale.id,
-#                 transaction_type='Issued',
-#                 quantity=consumption_qty,
-#                 unit_value= product_unit_bottle.cost_price if product_unit_bottle else 0 or 0,
-#                 status=1
-#             )
-#             bottle_txn.calculate_total_value()
-#             db.session.add(bottle_txn)
-                            
-                
-                
-#         # Record inventory transaction for container
-#         db.session.add(InventoryTransaction(
-#             transaction_no=txn_id,
-#             product_id=product.id,
-#             purchase_order_id=None,
-#             quantity=consumption_qty,
-#             unit_price=unit_price,
-#             total_price=total_price,
-#             transaction_type='Sale',
-#             status=1
-#         ))
-
-
-#         # --- Reduce stock ---
-#         product.quantity -= consumption_qty
-#         db.session.add(product)
-
-#         # --- Get latest purchase price (for COGS) ---
-#         latest_purchase = (
-#             PurchaseOrderItem.query
-#             .filter(PurchaseOrderItem.product_id == product.id)
-#             .order_by(PurchaseOrderItem.created_at.desc())
-#             .first()
-#         )
-#         purchase_price = latest_purchase.unit_price if latest_purchase else 0.0
-
-#         cogs_total += purchase_price * consumption_qty
-#         total_amount += total_price
-
-#         # --- Create SaleItem record ---
-#         sale_item = SaleItem(
-#             sale_id=sale.id,
-#             product_id=product.id,
-#             product_name=product.name,
-#             quantity=quantity,
-#             unit_price=unit_price,
-#             total_price=total_price,
-#             unit_id=unit_id,
-#             status=1
-#         )
-#         db.session.add(sale_item)
-
-#     # --- Final Sale Calculations ---
-#     sale.total_amount = total_amount
-#     sale.balance = total_amount - amount_paid
-
-#     if amount_paid == 0:
-#         sale.status = 3  # Credit
-#     elif 0 < amount_paid < total_amount:
-#         sale.status = 4  # Partial
-#     else:
-#         sale.status = 1  # Paid
-
-#     db.session.flush()
-
-#     # --- Ledger Posting ---
-#     payment_type = data.get('payment_type', 'Cash')
-#     credit_account_code = 1100  # default: Accounts Receivable
-#     if payment_account_id:
-#         payment_account = Account.query.get(payment_account_id)
-#         if not payment_account:
-#             raise ValueError("Invalid payment account")
-#         credit_account_code = payment_account.code
-
-#     if amount_paid > 0:
-#         if amount_paid >= total_amount:
-#             entries = [
-#                 {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
-#                 {"account_id": 4010, "transaction_type": "Credit", "amount": amount_paid},
-#                 {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
-#                 {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
-#             ]
-#         else:
-#             entries = [
-#                 {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
-#                 {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount - amount_paid},
-#                 {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
-#                 {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
-#                 {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
-#             ]
-#     else:
-#         entries = [
-#             {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount},
-#             {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
-#             {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
-#             {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
-#         ]
-
-#     gl_entries = post_to_ledger(
-#         entries,
-#         transaction_no_id=txn_id,
-#         description=f"Sale #{sale.id}",
-#         transaction_date=sale_date
-#     )
-#     sale.transaction_no = txn_id
-
-#     # --- Payment Record ---
-#     if amount_paid > 0:
-#         payment = Payment(
-#             sale_id=sale.id,
-#             amount=amount_paid,
-#             payment_type=payment_type,
-#             reference=data.get("memo", txn_str),
-#             payment_date=sale_date,
-#             payment_account_id=payment_account_id,
-#             status=1,
-#             transaction_no=txn_id
-#         )
-#         db.session.add(payment)
-
-#     db.session.commit()
-
-#     return jsonify({
-#         "message": "Sale created successfully",
-#         "sale_id": sale.id,
-#         "total_amount": sale.total_amount,
-#         "total_paid": sale.total_paid,
-#         "balance": sale.balance,
-#         "payment_status": sale.status,
-#         "transaction_no": txn_str,
-#         "sale_date": sale.sale_date.strftime("%Y-%m-%d")
-#     }), 201
-
-    # except ValueError as ve:
-    #     db.session.rollback()
-    #     return jsonify({"error": str(ve)}), 400
-    # except Exception as e:
-    #     db.session.rollback()
-    #     return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
 # ------------------ Get All Sales ------------------ #
 @token_required
 @sales_bp.route('/', methods=['GET'])
@@ -523,37 +292,6 @@ def get_sales():
 
     except Exception as e:
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-
-# # ------------------ Get All Sales ------------------ #
-# @token_required
-# @sales_bp.route('/', methods=['GET'])
-# def get_sales():
-#     sales = Sale.query.filter(Sale.status.in_([1, 2, 3,4])).order_by(Sale.id.desc()).all()  # Only active
-#     data = []
-#     for s in sales:
-#         sale_items = SaleItem.query.filter_by(sale_id=s.id, status=1).all()
-#         items = [{
-#             "product_id": i.product_id,
-#             "product_name": i.product_name,
-#             "quantity": i.quantity,
-#             "unit_price": i.unit_price,
-#             "total_price": i.total_price
-#         } for i in sale_items]
-
-#         data.append({
-#             "sale_id": s.id,
-#             "sale_number": s.sale_number,
-#             "total_amount": s.total_amount,
-#             "payment_status": s.payment_status,
-#             "sale_date": s.sale_date,
-#             "created_at": s.created_at,
-#             "updated_at": s.updated_at,
-#             "items": items,
-#             "balance":s.balance,
-#             "total_paid":s.total_paid,
-#         })
-#     return jsonify(data)
 
 
 # ------------------ Get Single Sale ------------------ #
@@ -2036,6 +1774,8 @@ def auto_returnable_or_sell_for_customer():
     total_bottles_applied = total_crates_applied = 0
     total_bottles_damaged_applied = total_crates_damaged_applied = 0
     total_bottles_sold = total_crates_sold = 0
+    crates_sold_amount=0
+    bottles_sold_amount=0
 
 
     # Apply returns, damages, and sales
@@ -2050,6 +1790,12 @@ def auto_returnable_or_sell_for_customer():
         }
         # product_unit_id = item.get("product_unit_id")
         # container_id = item.get("container_id")
+        if item.get("crates_sold") :
+            crates_sold_amount+=item.get("crates_sold")*item.get("crates_sold_amount")
+        if item.get("bottles_sold"):
+            bottles_sold_amount +=item.get("bottles_sold")*item.get("bottles_sold_amount")
+
+
 
         # Apply FIFO per sale
         for sale in pending_sales:
@@ -2076,9 +1822,22 @@ def auto_returnable_or_sell_for_customer():
             # Stop if all quantities allocated
             if all(v <= 0 for v in quantities.values()):
                 break
+    if crates_sold_amount > 0 or bottles_sold_amount>0:
+        amount = crates_sold_amount+bottles_sold_amount
+        # Post new GL entries
+        txn_id, txn_no_str = generate_transaction_number('BUY-BOTTLE')
+        payment_account_code= Account.query.filter(Account.id==data.get("cash_account_id")).first().code
+
+        entries = [
+            {"account_id": payment_account_code, "transaction_type": "Debit", "amount": amount},
+            {"account_id": 4010, "transaction_type": "Credit", "amount": amount},
+            # {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
+            # {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+        ]
+        gl_entries = post_to_ledger(entries, transaction_no_id=txn_id, description=f"Crate and Bottle Sale of  #{customer_id}")
+        # payment.transaction_no = txn_id
 
 
-        
 
     db.session.commit()
 

@@ -238,14 +238,14 @@ def add_purchase_order():
         product_unit= ProductUnit.query.filter_by(id=item_data.get('unit_id')).first()
         quantity=0
         # cost_price=0
-        if product_unit and item_data["is_returnable"]:
+        if product_unit:
             if product_unit.conversion_quantity and product_unit.conversion_quantity>1 :
                 quantity=item_data['quantity'] * product_unit.conversion_quantity
                 # cost_price= round(item_data['cost_price']/product_unit.conversion_quantity,2)
             else:
                 quantity=item_data['quantity']
                 # cost_price=item_data['cost_price'],
-
+       
         item = PurchaseOrderItem(
             purchase_order_id=po.id,
             product_id=item_data['product_id'],
@@ -474,140 +474,7 @@ def pay_purchase_order(id):
 
 
 
-# @token_required
-# @suppliers_bp.route('/orders/<int:id>/edit', methods=['PUT'])
-# def edit_purchase_order(id):
-#     """
-#     Edit an existing purchase order, handle overpayments, and mark as fully paid if necessary.
-#     """
-#     po = PurchaseOrder.query.get_or_404(id)
-#     data = request.get_json()
 
-#     old_total = po.total_amount
-#     old_paid = po.total_paid
-
-#     # Update header
-#     po.supplier_id = data.get('supplier_id', po.supplier_id)
-#     po.invoice_number = data.get('invoice_number', po.invoice_number)
-#     po.memo = data.get('memo', po.memo)
-#     po.purchase_date = data.get('purchase_date', po.purchase_date)
-
-#     # ---- Update or Add Items ----
-#     if 'items' in data:
-#         existing_item_ids = [item.id for item in po.items]
-#         new_item_ids = [i.get('id') for i in data['items'] if i.get('id')]
-
-#         # Delete removed items
-#         for item in po.items:
-#             if item.id not in new_item_ids:
-#                 db.session.delete(item)
-
-#         # Update/add items
-#         for item_data in data['items']:
-#             if 'id' in item_data and item_data['id']:
-#                 item = PurchaseOrderItem.query.get(item_data['id'])
-#                 item.quantity = item_data.get('quantity', item.quantity)
-#                 item.unit_price = item_data.get('unit_price', item.unit_price)
-#                 item.calculate_total()
-#             else:
-#                 new_item = PurchaseOrderItem(
-#                     purchase_order_id=po.id,
-#                     product_id=item_data['product_id'],
-#                     quantity=item_data['quantity'],
-#                     unit_price=item_data['unit_price'],
-#                     status=1
-#                 )
-#                 new_item.calculate_total()
-#                 db.session.add(new_item)
-
-#     # ---- Recalculate Totals ----
-#     po.update_totals()
-#     new_total = po.total_amount
-
-#     # Get all existing payments
-#     payments = SupplierPayment.query.filter_by(purchase_order_id=po.id, status=1).all()
-#     total_paid = sum(p.amount for p in payments)
-
-#     # --- Handle overpayment scenario ---
-#     if total_paid >= new_total:
-#         # Total paid exceeds or equals new total -> mark as fully paid
-#         po.total_paid = new_total
-#         po.total_balance = 0
-#         po.status = 3  # fully paid
-
-#         # Calculate excess payment
-#         excess_payment = total_paid - new_total
-#         if excess_payment > 0:
-#             # Record refund in ledger
-#             txn_id, txn_str = generate_transaction_number('PO-REFUND', transaction_date=po.purchase_date)
-#             refund_entries = [
-#                 {"account_id": 3000, "transaction_type": "Debit", "amount": excess_payment},  # AP Debit
-#                 {"account_id": 1000, "transaction_type": "Credit", "amount": excess_payment}  # Cash/Bank/Refund
-#             ]
-#             post_to_ledger(refund_entries, transaction_no_id=txn_id,
-#                            description=f"Refund excess payment for PO #{po.id}",
-#                            transaction_date=po.purchase_date)
-
-#             # Optional: add refund record
-#             refund_payment = SupplierPayment(
-#                 purchase_order_id=po.id,
-#                 amount=-excess_payment,
-#                 payment_account_id=payments[0].payment_account_id if payments else None,
-#                 payment_type='Refund',
-#                 payment_date=po.purchase_date,
-#                 status=1
-#             )
-#             db.session.add(refund_payment)
-#     else:
-#         # Regular case: recalc balance
-#         po.total_paid = total_paid
-#         po.total_balance = new_total - total_paid
-#         po.status = 2 if po.total_balance > 0 else 3  # partially paid or fully paid
-
-#     # --- GL Handling for PO edit ---
-#     txn_id, txn_str = generate_transaction_number('PO-EDIT', transaction_date=po.purchase_date)
-#     diff = new_total - old_total
-
-#     if diff != 0:
-#         if diff > 0:
-#             entries = [
-#                 {"account_id": 1400, "transaction_type": "Debit", "amount": diff},
-#                 {"account_id": 3000, "transaction_type": "Credit", "amount": diff}
-#             ]
-#             desc = f"Adjustment for increased PO #{po.id} by {diff}"
-#         else:
-#             entries = [
-#                 {"account_id": 3000, "transaction_type": "Debit", "amount": abs(diff)},
-#                 {"account_id": 1400, "transaction_type": "Credit", "amount": abs(diff)}
-#             ]
-#             desc = f"Adjustment for reduced PO #{po.id} by {abs(diff)}"
-#         post_to_ledger(entries, transaction_no_id=txn_id,
-#                        description=desc, transaction_date=po.purchase_date)
-
-#     # Revalidate remaining payments
-#     for payment in payments:
-#         if payment.amount <= po.total_paid:  # skip refunded portion
-#             pay_entries = [
-#                 {"account_id": 3000, "transaction_type": "Debit", "amount": payment.amount},
-#                 {"account_id": Account.query.get(payment.payment_account_id).code,
-#                  "transaction_type": "Credit", "amount": payment.amount}
-#             ]
-#             post_to_ledger(pay_entries, transaction_no_id=txn_id,
-#                            description=f"Revalidate payment #{payment.id} for PO #{po.id}",
-#                            transaction_date=payment.payment_date)
-
-#     db.session.commit()
-
-#     return jsonify({
-#         "message": f"Purchase Order #{po.id} updated successfully",
-#         "old_total": old_total,
-#         "new_total": new_total,
-#         "total_paid": po.total_paid,
-#         "balance": po.total_balance,
-#         "status": po.status,
-#         "refund": total_paid - new_total if total_paid > new_total else 0,
-#         "gl_transaction_id": txn_id
-#     }), 200
 @token_required
 @suppliers_bp.route('/orders/<int:id>/edit', methods=['PUT'])
 def edit_purchase_order(id):
@@ -628,7 +495,7 @@ def edit_purchase_order(id):
                 product_unit= ProductUnit.query.filter_by(id=product.unit_id).first()
                 quantity=0
                 # cost_price=0
-                if product_unit and product_unit.is_returnable:
+                if product_unit :
                     if product_unit.conversion_quantity and product_unit.conversion_quantity>1 :
                         quantity=item.quantity * product_unit.conversion_quantity
                         # cost_price= round(item_data['cost_price']/product_unit.conversion_quantity,2)
@@ -688,7 +555,7 @@ def edit_purchase_order(id):
                     product_unit= ProductUnit.query.filter_by(id=product.unit_id).first()
                     quantity=0
                     # cost_price=0
-                    if product_unit and product_unit.is_returnable:
+                    if product_unit :
                         if product_unit.conversion_quantity and product_unit.conversion_quantity>1 :
                             quantity=item.quantity * product_unit.conversion_quantity
                             # cost_price= round(item_data['cost_price']/product_unit.conversion_quantity,2)
@@ -736,7 +603,7 @@ def edit_purchase_order(id):
                 product_unit= ProductUnit.query.filter_by(id=product.unit_id).first()
                 diff_quantity=0
                 # cost_price=0
-                if product_unit and product_unit.is_returnable:
+                if product_unit :
                     if product_unit.conversion_quantity and product_unit.conversion_quantity>1 :
                         diff_quantity=diff_qty * product_unit.conversion_quantity
                         # cost_price= round(item_data['cost_price']/product_unit.conversion_quantity,2)
@@ -781,7 +648,7 @@ def edit_purchase_order(id):
                 product_unit= ProductUnit.query.filter_by(id=product.unit_id).first()
                 quantity=0
                 # cost_price=0
-                if product_unit and product_unit.is_returnable:
+                if product_unit :
                     if product_unit.conversion_quantity and product_unit.conversion_quantity>1 :
                         quantity=new_item.quantity * product_unit.conversion_quantity
                         # cost_price= round(item_data['cost_price']/product_unit.conversion_quantity,2)
@@ -984,83 +851,3 @@ def get_purchase_order_details(purchase_order_id):
     }
 
     return jsonify(response)
-
-# def get_purchase_order_details(purchase_order_id):
-#     """
-#     Retrieve complete purchase order details including supplier info,
-#     items, payments, and financial totals.
-#     """
-#     # Fetch the Purchase Order with related Supplier, Items, and Payments
-#     purchase_order = (
-#         PurchaseOrder.query
-#         .options(
-#             joinedload(PurchaseOrder.supplier),
-#             joinedload(PurchaseOrder.items),
-#             joinedload(PurchaseOrder.supplier).joinedload(Supplier.purchase_orders)
-#         )
-#         .filter(PurchaseOrder.id == purchase_order_id, PurchaseOrder.status != 9)
-#         .first()
-#     )
-
-#     if not purchase_order:
-#         return {"error": "Purchase order not found or inactive"}, 404
-
-#     # Fetch all payments linked to this purchase order
-#     payments = SupplierPayment.query.filter_by(
-#         purchase_order_id=purchase_order_id,
-#         status=1
-#     ).all()
-
-#     # Calculate totals
-#     total_amount = sum(item.total_price for item in purchase_order.items if item.status != 9)
-#     total_paid = sum(payment.amount for payment in payments)
-#     balance = total_amount - total_paid
-
-#     # Prepare item details
-#     item_details = [
-#         {
-#             "product_id": item.product_id,
-#             "product_name": item.product.name if item.product else None,
-#             "quantity": item.quantity,
-#             "unit_price": item.unit_price,
-#             "total_price": item.total_price
-#         }
-#         for item in purchase_order.items if item.status != 9
-#     ]
-
-#     # Prepare payment details
-#     payment_details = [
-
-#         {
-#             "payment_id": p.id,
-#             "amount": p.amount,
-#             "payment_type": p.payment_type,
-#             "payment_date": p.payment_date.strftime("%Y-%m-%d"),
-#             "reference": p.reference,
-#             "account_id":  Account.query.get(p.payment_account_id).name if p.payment_account_id else None,
-#         }
-#         for p in payments
-#     ]
-
-#     # Final response
-#     response = {
-#         "purchase_order_id": purchase_order.id,
-#         "invoice_number": purchase_order.invoice_number,
-#         "purchase_date": purchase_order.purchase_date.strftime("%Y-%m-%d"),
-#         "supplier": {
-#             "supplier_id": purchase_order.supplier.id,
-#             "name": purchase_order.supplier.name,
-#             "contact": purchase_order.supplier.contact,
-#             "email": purchase_order.supplier.email
-#         },
-#         "items": item_details,
-#         "payments": payment_details,
-#         "summary": {
-#             "total_amount": total_amount,
-#             "total_paid": total_paid,
-#             "balance": balance,
-#             "grand_total": total_amount  # Can add tax or other charges here later
-#         }
-#     }
-
-#     return jsonify(response)
