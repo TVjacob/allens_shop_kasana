@@ -38,6 +38,7 @@ import UserProfile from '@/pages/UserProfile.vue';
 import CustomeReturns from '@/pages/CustomeReturns.vue';
 import ReturnablesForm from '@/pages/ReturnablesForm.vue';
 import SalesProfitLoss from '@/pages/reports/SalesProfitLoss.vue';
+import CustomerManagement from '@/pages/CustomerManagement.vue';
 
 const routes = [
   {
@@ -108,6 +109,12 @@ const routes = [
         name: 'Customer Returns',
         component: CustomeReturns,
         meta: { showGreeting: false, pageName: 'Customer Returns', requiresAuth: true,}
+      },
+      {
+        path: '/customermanagement',
+        name: 'CustomerManagement',
+        component: CustomerManagement,
+        meta: { showGreeting: false, pageName: 'CustomerManagement', requiresAuth: true,}
       },
       {
         path:'/reports/sales-profit-list',

@@ -74,6 +74,7 @@ export default {
         '/purchaselist': 'Purchase List',
         '/saleslist': 'Sales List',
         '/accounts': 'Accounts',
+        '/customermanagement': 'CustomerManagement',
       };
       return titles[route.path] || '';
     });

@@ -178,9 +178,9 @@ def create_sale():
             if amount_paid >= total_amount:
                 entries = [
                     {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
-                    {"account_id": 4010, "transaction_type": "Credit", "amount": amount_paid},
-                    {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
-                    {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+                    {"account_id": 4010, "transaction_type": "Credit", "amount": amount_paid}, # sales revenus
+                    {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},#cogs
+                    {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},#inventory
                 ]
             else:
                 entries = [
@@ -1760,7 +1760,7 @@ def auto_returnable_or_sell_for_customer():
         return jsonify({"error": f"Customer ID {customer_id} not found"}), 404
 
     # try:
-        # Fetch all sales for this customer with pending returnables
+        # Fetch all sales for this customer with pending returnables#peter0304
     pending_sales = (
         db.session.query(Sale)
         .filter(Sale.customer_id == customer_id, Sale.status.in_([1,2,3,4]))

@@ -29,6 +29,15 @@ class Customer(db.Model, StatusMixin):
 
     def __repr__(self):
         return f"<Customer {self.name}>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "phone": self.phone,
+            "email": self.email,
+            "address": self.address,
+        }
 
 # ------------------ Product & Inventory ------------------
 class Category(db.Model, StatusMixin):
@@ -679,3 +688,76 @@ class ProductUnit(db.Model, StatusMixin):
     def get_total_price(self, quantity):
         """Calculate total retail value for given quantity."""
         return self.retail_price * quantity
+
+
+class CustomerDebt(db.Model, StatusMixin):
+    __tablename__ = 'customer_debt'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
+    sale_id = db.Column(db.Integer, db.ForeignKey('sale.id'), nullable=True)
+
+    # Financials
+    debt_balance = db.Column(db.Float, nullable=False, default=0.0)
+    total_amount = db.Column(db.Float, nullable=False, default=0.0)
+    amount_paid = db.Column(db.Float, default=0.0)
+
+    # Tracking & Description
+    memo = db.Column(db.String(255))
+    debt_date = db.Column(db.DateTime, default=datetime.utcnow)
+    transaction_no = db.Column(db.Integer, db.ForeignKey('transaction_number.id'), nullable=True)
+
+    # Status: "Pending", "Partial", "Cleared"
+    payment_status = db.Column(db.String(20), default="Pending")
+
+    # Relationships
+    customer = db.relationship('Customer', backref=db.backref('debts', lazy=True))
+    sale = db.relationship('Sale', backref=db.backref('customer_debt', uselist=False))
+    transaction_number = db.relationship('TransactionNumber')
+
+    def update_status(self):
+        """Automatically update status based on payments."""
+        if self.amount_paid >= self.total_amount:
+            self.payment_status = "Cleared"
+            self.debt_balance = 0
+        elif self.amount_paid > 0:
+            self.payment_status = "Partial"
+            self.debt_balance = self.total_amount - self.amount_paid
+        else:
+            self.payment_status = "Pending"
+
+        self.updated_at = datetime.utcnow()
+
+    def __repr__(self):
+        return f"<CustomerDebt Customer={self.customer_id} Balance={self.debt_balance}>"
+
+
+
+class CustomerPayment(db.Model, StatusMixin):
+    __tablename__ = 'customer_payment'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
+    sale_id = db.Column(db.Integer, db.ForeignKey('sale.id'), nullable=True)
+    debt_id = db.Column(db.Integer, db.ForeignKey('customer_debt.id'), nullable=True)
+
+    # Payment info
+    amount = db.Column(db.Float, nullable=False)
+    payment_date = db.Column(db.DateTime, default=datetime.utcnow)
+    payment_account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
+    payment_type = db.Column(db.String(20), default='Cash')  # Cash, Bank, MobileMoney
+    reference = db.Column(db.String(100))
+    transaction_no = db.Column(db.Integer, db.ForeignKey('transaction_number.id'), nullable=True)
+
+    # Status
+    status = db.Column(db.String(20), default="Completed")  # Pending, Completed, Reversed
+
+    # Relationships
+    customer = db.relationship('Customer', backref=db.backref('payments', lazy=True))
+    sale = db.relationship('Sale', backref=db.backref('payments', lazy=True))
+    debt = db.relationship('CustomerDebt', backref=db.backref('payments', lazy=True))
+    payment_account = db.relationship('Account', backref=db.backref('customer_payments', lazy=True))
+    transaction_number = db.relationship('TransactionNumber')
+
+    def __repr__(self):
+        return f"<CustomerPayment {self.amount} from Customer={self.customer_id}>"

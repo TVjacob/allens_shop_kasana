@@ -106,6 +106,7 @@ export default {
       { name: 'Expenses', path: '/expenses', icon: '💸', permission: 'view_expense' },
       { name: 'Reports', path: '/reports', icon: '📊', permission: 'view_reports' },
       { name: 'Users', path: '/users', icon: '👤', permission: 'view_users' },
+      {name:'Old Debts ' ,path:'/customermanagement',icon :'💵', permissions:'view_customers'},
     ];
 
     const filteredMenuItems = menuItems.filter(item => !item.permission || permissions.includes(item.permission));
