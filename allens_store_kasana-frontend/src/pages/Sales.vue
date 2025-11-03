@@ -151,12 +151,12 @@
           
           <!-- Unit Price -->
           <td class="p-2 border text-right text-base w-48">
-  <input
-    type="number"
-    v-model.number="item.unit_price"
-    @input="calculateTotal(item)"
-    class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-  />
+          <input
+            type="number"
+            v-model.number="item.unit_price"
+            @input="calculateTotal(item)"
+            class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+          />
             <p v-if="saleItemsErrors[idx]?.unit_price" class="text-red-600 text-sm mt-1">
               {{ saleItemsErrors[idx].unit_price }}
             </p>
@@ -309,7 +309,8 @@ const debouncedSearchProduct = debounce(async (query, idx) => {
       stock_qty: p.quantity,
       retail_price: p.price || 0,
       wholesale_price: p.whole_price || 0,
-      last_purchase_price: p.last_purchase_price || 0
+      last_purchase_price: p.last_purchase_price || 0,
+      // unit_price : p.whole_price || 0 
     }))
   } finally {
     item.loading = false
@@ -342,6 +343,7 @@ const selectProduct = async (id, idx) => {
       item.selectedUnitObj = item.units[0]
       item.retail_price = item.units[0].retail_price ?? 0
       item.wholesale_price = item.units[0].wholesale_price ?? 0
+      item.unit_price = item.units[0].wholesale_price ?? 0
     }
   } catch (err) {
     console.error('Failed to fetch units:', err)
