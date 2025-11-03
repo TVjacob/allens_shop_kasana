@@ -73,6 +73,14 @@ def add_product():
 @inventory_bp.route('/products', methods=['GET'])
 def list_products():
     products = Product.query.filter(Product.status != 9).all()  # exclude deleted products
+    # Fetch all non-deleted products, sorted by category name and then product name
+    products = (
+        Product.query
+        .filter(Product.status != 9)  # exclude deleted
+        .join(Category, Product.category_id == Category.id)
+        .order_by(Category.name.asc(), Product.name.asc())
+        .all()
+    )
     result = []
 
     for p in products:
