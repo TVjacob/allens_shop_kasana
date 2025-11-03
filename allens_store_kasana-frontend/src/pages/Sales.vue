@@ -150,13 +150,13 @@
           </td>
           
           <!-- Unit Price -->
-          <td class="p-2 border text-right">
-            <input
-              type="number"
-              v-model.number="item.unit_price"
-              @input="calculateTotal(item)"
-              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-            />
+          <td class="p-2 border text-right text-base w-48">
+  <input
+    type="number"
+    v-model.number="item.unit_price"
+    @input="calculateTotal(item)"
+    class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+  />
             <p v-if="saleItemsErrors[idx]?.unit_price" class="text-red-600 text-sm mt-1">
               {{ saleItemsErrors[idx].unit_price }}
             </p>
@@ -181,7 +181,7 @@
 
           <!-- Total -->
           <td class="p-2 border text-right font-bold text-indigo-700">
-            {{ item.total_price.toFixed(2) }}
+            {{ formatPrice(item.total_price) }}
           </td>
 
           <!-- Actions -->
@@ -207,7 +207,7 @@
       </button>
       <div class="text-2xl font-bold">
         Grand Total:
-        <span class="text-indigo-600">{{ grandTotal.toFixed(2) }}</span>
+        <span class="text-indigo-600">{{ formatPrice(grandTotal) }}</span>
       </div>
     </div>
 

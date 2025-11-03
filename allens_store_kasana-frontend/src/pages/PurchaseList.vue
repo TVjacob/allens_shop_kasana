@@ -54,9 +54,9 @@
             <td class="p-3 border">{{ po.supplier_name }}</td>
             <td class="p-3 border">{{ po.invoice_number }}</td>
             <td class="p-3 border">{{ formatDate(po.purchase_date) }}</td>
-            <td class="p-3 border text-right">{{ po.total_amount.toFixed(2) }}</td>
-            <td class="p-3 border text-right">{{ po.total_paid.toFixed(2) }}</td>
-            <td class="p-3 border text-right">{{ po.total_balance.toFixed(2) }}</td>
+            <td class="p-3 border text-right">{{ formatPrice(po.total_amount) }}</td>
+            <td class="p-3 border text-right">{{ formatPrice(po.total_paid) }}</td>
+            <td class="p-3 border text-right">{{ formatPrice(po.total_balance) }}</td>
             <td class="p-3 border text-center">
               <span
                 :class="po.total_balance === 0 ? 'text-green-600 font-bold' : 'text-red-600 font-bold'"
@@ -144,6 +144,7 @@ const openPaymentModal = po => {
   selectedPO.value = po;
   showPaymentModal.value = true;
 };
+const formatPrice = (value) => (value == null ? '0' : new Intl.NumberFormat('en-UG').format(value))
 
 const refreshPurchaseOrders = () => fetchPurchaseOrders();
 
