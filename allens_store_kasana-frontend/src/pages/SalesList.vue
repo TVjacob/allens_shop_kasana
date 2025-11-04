@@ -58,15 +58,15 @@
             <td class="p-2 border text-right">{{ formatCurrency(sale.total_paid || 0) }}</td>
             <td
               class="p-2 border text-right font-semibold"
-              :class="sale.balance === 0 ? 'text-green-600' : 'text-red-600'"
+              :class="sale.balance === 0 || sale.balance <0? 'text-green-600' : 'text-red-600'"
             >
               {{ formatCurrency(sale.balance) }}
             </td>
             <td class="p-2 border text-center">
               <span
-                :class="sale.balance === 0 ? 'bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm' : 'bg-red-100 text-red-800 px-2 py-1 rounded-full text-sm'"
+                :class="sale.balance === 0  || sale.balance <0? 'bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm' : 'bg-red-100 text-red-800 px-2 py-1 rounded-full text-sm'"
               >
-                {{ sale.balance === 0 ? 'Paid' : 'Unpaid' }}
+                {{ sale.balance === 0 || sale.balance <0? 'Paid' : 'Unpaid' }}
               </span>
             </td>
             <td class="p-2 border text-center flex justify-center gap-2">
