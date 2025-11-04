@@ -80,10 +80,13 @@
           <th class="p-2 border w-56">Unit</th>
           <th class="p-2 border">Retail</th>
           <th class="p-2 border">Wholesale</th>
+          <th class="p-2 border">Divide by Rate</th>
+          <th class="p-2 border">how Many</th>
           <th class="p-2 border">Selling Price</th>
           <th class="p-2 border">Cost Price </th>
 
           <th class="p-2 border">Quantity</th>
+
           <th class="p-2 border">Total</th>
           <th class="p-2 border">Actions</th>
         </tr>
@@ -149,6 +152,30 @@
             {{ formatPrice(item.wholesale_price) }}
           </td>
           
+          <!-- Rate -->
+          <td class="p-2 border text-base w-48">
+            <input
+              type="number"
+              v-model.number="item.rate"
+              min="0"
+              placeholder="0"
+              @input="recalculateUnitPrice(item)"
+              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+            />
+          </td>
+          <!-- Quantity Divider -->
+          <td class="p-2 border text-base w-48">
+            <input
+              type="number"
+              v-model.number="item.quantity_number"
+              min="1"
+              placeholder="1"
+              @input="recalculateQuantityRate(item)"
+              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+            />
+          </td>
+
+
           <!-- Unit Price -->
           <td class="p-2 border text-right text-base w-48">
           <input
@@ -167,7 +194,7 @@
             {{ formatPrice(item.last_purchase_price) }}
           </td>
           <!-- Quantity -->
-          <td class="p-2 border">
+          <td class="p-2 border text-base w-48">
             <input
               type="number"
               v-model.number="item.quantity"
@@ -178,6 +205,8 @@
               {{ saleItemsErrors[idx].quantity }}
             </p>
           </td>
+
+
 
           <!-- Total -->
           <td class="p-2 border text-right font-bold text-indigo-700">
@@ -344,10 +373,27 @@ const selectProduct = async (id, idx) => {
       item.retail_price = item.units[0].retail_price ?? 0
       item.wholesale_price = item.units[0].wholesale_price ?? 0
       item.unit_price = item.units[0].wholesale_price ?? 0
+      item.conversion_quantity= item.units[0].conversion_quantity ?? 1
     }
   } catch (err) {
     console.error('Failed to fetch units:', err)
   }
+}
+const recalculateQuantityRate = (item) => {
+  if (item.quantity_number > 0) {
+    item.unit_price = item.rate / item.quantity_number
+  } else {
+    item.unit_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
+}
+const recalculateUnitPrice = (item) => {
+  if (item.rate && item.rate > 0) {
+    item.unit_price = item.rate / (item.quantity_number || item.conversion_quantity || 1)
+  } else {
+    item.unit_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
 }
 
 const selectUnit = (unitId, idx) => {
@@ -358,6 +404,7 @@ const selectUnit = (unitId, idx) => {
   item.retail_price = selected.retail_price ?? 0
   item.wholesale_price = selected.wholesale_price ?? 0
   item.unit_price = selected.wholesale_price ?? 0
+  item.conversion_quantity= selected.conversion_quantity??1
 
   calculateTotal(item)
 }
@@ -377,7 +424,11 @@ const addRow = () => {
     selectedUnitObj: null,
     units: [],
     searchResults: [],
-    loading: false
+    rate: 0, // 🔹 newly added
+    quantity_number: 24, // ✅ newly added
+
+    loading: false,
+    conversion_quantity:1
   })
   saleItemsErrors.value.push({ product_id: '', quantity: '', unit_id: '', unit_price: '' })
 }
@@ -393,6 +444,17 @@ const validateQuantity = (item, idx) => {
   if (item.quantity > item.stock_qty) item.quantity = item.stock_qty
   calculateTotal(item)
 }
+
+// const recalculateUnitPrice = (item) => {
+//   if (item.rate && item.rate > 0) {
+//     // derive new unit price
+//     item.unit_price =  item.rate /item.conversion_quantity
+//   } else {
+//     // reset to default if cleared
+//     item.unit_price = item.wholesale_price || 0
+//   }
+//   calculateTotal(item)
+// }
 
 // ---------- Validation ----------
 const validateSale = () => {

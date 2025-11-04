@@ -59,6 +59,8 @@
           <th class="p-2 border">Product</th>
           <th class="p-2 border">Unit</th>
           <th class="p-2 border">Stock</th>
+          <th class="p-2 border">Divide by Rate</th>
+          <th class="p-2 border">how Many</th>
           <th class="p-2 border">Buying price</th>
           <th class="p-2 border">Wholesale</th>
           <th class="p-2 border">Retail</th>
@@ -90,6 +92,9 @@
               <p v-if="errors[`product_${idx}`]" class="text-red-500 text-xs">{{ errors[`product_${idx}`] }}</p>
             </td>
 
+
+
+
             <!-- Unit -->
             <td class="p-2 border text-center">
               <select
@@ -111,6 +116,30 @@
 
             <!-- Stock -->
             <td class="p-2 border text-center">{{ item.stock_qty }}</td>
+
+                      <!-- Rate -->
+          <td class="p-2 border text-base w-48">
+            <input
+              type="number"
+              v-model.number="item.rate"
+              min="0"
+              placeholder="0"
+              @input="recalculateUnitPrice(item)"
+              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+            />
+          </td>
+          <!-- Quantity Divider -->
+          <td class="p-2 border text-base w-48">
+            <input
+              type="number"
+              v-model.number="item.quantity_number"
+              min="1"
+              placeholder="1"
+              @input="recalculateQuantityRate(item)"
+              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+            />
+          </td>
+
 
             <!-- Editable Cost -->
             <td class="p-2 border text-right">
@@ -332,7 +361,22 @@ const onUnitSelect = (idx) => {
   item.container = unit.container || null
   calculateTotal(item)
 }
-
+const recalculateQuantityRate = (item) => {
+  if (item.quantity_number > 0) {
+    item.cost_price = item.rate / item.quantity_number
+  } else {
+    item.cost_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
+}
+const recalculateUnitPrice = (item) => {
+  if (item.rate && item.rate > 0) {
+    item.cost_price = item.rate / (item.quantity_number || item.conversion_quantity || 1)
+  } else {
+    item.cost_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
+}
 // -------- Table Logic --------
 const addRow = () => {
   poItems.value.push({
@@ -347,6 +391,9 @@ const addRow = () => {
     quantity: 0,
     total_price: 0,
     searchResults: [],
+    rate: 0, // 🔹 newly added
+    quantity_number: 24, // ✅ newly added
+
     loading: false,
     container: null,
   })
