@@ -154,15 +154,39 @@ def create_sale():
             )
             db.session.add(sale_item)
 
-        # --- Final Sale calculations ---
+        # # --- Final Sale calculations ---
+        # sale.total_amount = total_amount
+        # balance = total_amount - amount_paid
+
+        # if amount_paid == 0:
+        #     sale.status = 3  # Credit
+        # elif 0 < amount_paid < round(total_amount) and balance >100:
+        #     sale.status = 4  # Partial
+        # else:
+        #     sale.status = 1  # Paid
+        
+        # --- Final Sale Calculations ---
         sale.total_amount = total_amount
-        sale.balance = total_amount - amount_paid
+        balance = total_amount - amount_paid
+
+        # 🔹 Status logic
         if amount_paid == 0:
-            sale.status = 3  # Credit
-        elif 0 < amount_paid < total_amount:
+            sale.status = 3  # Credit (nothing paid)
+        elif 0 < balance <= 100:
+            # If remaining balance is very small (≤100 UGX), treat as fully paid
+            sale.status = 1  # Paid
+            balance = 0      # Optional: clear tiny rounding difference
+        elif 0 < amount_paid < total_amount and balance > 100:
             sale.status = 4  # Partial
         else:
-            sale.status = 1  # Paid
+            sale.status = 1  # Fully Paid
+
+        # 🔹 Update balance field
+        sale.balance = round(balance, 2)
+
+        
+        sale.balance = total_amount - amount_paid
+
         db.session.flush()
 
         # --- Ledger Posting ---
@@ -232,6 +256,345 @@ def create_sale():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@token_required
+@sales_bp.route('/<int:sale_id>/delete', methods=['DELETE'])
+def delete_sale_permanently(sale_id):
+    """
+    Soft delete a sale (status = 9) and reverse all related accounting & inventory entries.
+    """
+    try:
+        sale = Sale.query.get_or_404(sale_id)
+
+        if sale.status == 9:
+            return jsonify({"message": "Sale already deleted"}), 400
+
+        txn_id = sale.transaction_no  # may be used for ledger linking
+
+        # -----------------------------
+        # STEP 1: Reverse inventory items
+        # -----------------------------
+        sale_items = SaleItem.query.filter_by(sale_id=sale.id, status=1).all()
+
+        for item in sale_items:
+            product = Product.query.get(item.product_id)
+            unit = ProductUnit.query.get(item.unit_id)
+
+            if product and unit:
+                revert_qty = item.quantity * (unit.conversion_quantity or 1)
+                product.quantity += revert_qty
+                db.session.add(product)
+
+                item.status = 9
+                db.session.add(item)
+
+        # -----------------------------
+        # STEP 2: Reverse bottle and container transactions
+        # -----------------------------
+        bottle_txns = BottleTransaction.query.filter_by(sale_id=sale.id, status=1).all()
+        for btxn in bottle_txns:
+            btxn.status = 9
+            db.session.add(btxn)
+
+        container_txns = ContainerTransaction.query.filter_by(sale_id=sale.id, status=1).all()
+        for ctxtn in container_txns:
+            ctxtn.status = 9
+            db.session.add(ctxtn)
+
+        # -----------------------------
+        # STEP 3: Soft delete related payments
+        # -----------------------------
+        payments = Payment.query.filter_by(sale_id=sale.id, status=1).all()
+        for payment in payments:
+            payment.status = 9
+            db.session.add(payment)
+
+        # -----------------------------
+        # STEP 4: Soft delete inventory transactions
+        # -----------------------------
+        inv_txns = InventoryTransaction.query.filter_by(transaction_no=sale.transaction_no, status=1).all()
+        for inv in inv_txns:
+            inv.status = 9
+            db.session.add(inv)
+
+        # -----------------------------
+        # STEP 5: Reverse General Ledger Entries
+        # -----------------------------
+        # Look for entries by transaction_no_id or by description text
+        ledger_txns = (
+            GeneralLedger.query
+            .filter(
+                (GeneralLedger.description.ilike(f"%Sale #{sale.id}%")) |
+                (GeneralLedger.description.ilike(f"%Payment for Sale #{sale.id}%")),
+                GeneralLedger.status == 1
+            )
+            .all()
+        )
+
+        for gl in ledger_txns:
+            # 1️⃣ Mark old as deleted
+            gl.status = 9
+            db.session.add(gl)
+
+            # 2️⃣ Create reversal entry (debit ↔ credit)
+            reversed_entry = GeneralLedger(
+                transaction_no=gl.transaction_no,
+                account_id=gl.account_id,
+                transaction_type="Debit" if gl.transaction_type == "Credit" else "Credit",
+                amount=gl.amount,
+                description=f"Reversal of {gl.description}",
+                transaction_date=datetime.utcnow(),
+                status=1
+            )
+            db.session.add(reversed_entry)
+
+        # -----------------------------
+        # STEP 6: Mark Sale as deleted
+        # -----------------------------
+        sale.status = 9
+        db.session.add(sale)
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"Sale #{sale.sale_number} deleted and reversed successfully",
+            "restocked_items": len(sale_items),
+            "payments_deleted": len(payments),
+            "ledger_reversed": len(ledger_txns)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+
+@token_required
+@sales_bp.route('/edit', methods=['PUT'])
+def create_or_update_sale():
+    data = request.json
+
+    try:
+        sale_id = data.get("sale_id")  # Optional for updates
+        items = data.get('items', [])
+        amount_paid = float(data.get('amount_paid', 0))
+        payment_account_id = data.get('payment_account_id')
+        sale_date_str = data.get("sale_date")
+        payment_type = data.get('payment_type', 'Cash')
+
+        if not items:
+            return jsonify({"error": "At least one item is required"}), 400
+
+        # --- Parse sale date ---
+        try:
+            sale_date = datetime.strptime(sale_date_str, "%Y-%m-%d") if sale_date_str else datetime.utcnow()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+
+        # --- If updating, delete previous sale first ---
+        if sale_id:
+            from flask import current_app
+            current_app.logger.info(f"Updating sale #{sale_id}: reversing previous sale.")
+            # Call the delete logic from before
+            delete_sale_permanently(sale_id)
+
+        # --- Initialize totals ---
+        total_amount = 0
+        cogs_total = 0
+        txn_id, txn_str = generate_transaction_number_partone('INV', transaction_date=sale_date)
+
+        # --- Create new Sale record ---
+        sale = Sale(
+            sale_number=txn_str,
+            customer_id=data.get("customer_id", 1),
+            total_paid=amount_paid,
+            status=1,
+            sale_date=sale_date
+        )
+        db.session.add(sale)
+        db.session.flush()
+
+        # --- Process Sale Items ---
+        for idx, item_data in enumerate(items, start=1):
+            product_id = item_data.get("product_id")
+            unit_id = item_data.get("unit_id")
+            quantity = float(item_data.get("quantity", 0))
+            unit_price = float(item_data.get("unit_price", 0))
+            total_price = float(item_data.get("total_price", unit_price * quantity))
+
+            if not product_id or not unit_id:
+                return jsonify({"error": f"Product ID and Unit ID are required for item #{idx}"}), 400
+
+            product = Product.query.get(product_id)
+            if not product:
+                return jsonify({"error": f"Product with ID {product_id} not found for item #{idx}"}), 404
+
+            unit = ProductUnit.query.get(unit_id)
+            if not unit or unit.product_id != product.id:
+                return jsonify({"error": f"Invalid unit {unit_id} for product {product.name}"}), 400
+
+            consumption_qty = quantity * (unit.conversion_quantity or 1)
+            if product.quantity < consumption_qty:
+                return jsonify({"error": f"Insufficient stock for {product.name}. Required {consumption_qty}, available {product.quantity}"}), 400
+
+            # --- Handle returnable containers ---
+            if unit.is_returnable:
+                container = ReturnableContainer.query.filter_by(product_unit_id=unit.id).first()
+                container_id = None
+                if container:
+                    container.process_transaction('Issued', quantity)
+                    db.session.add(container)
+
+                    cont_txn = ContainerTransaction(
+                        container_id=container.id,
+                        sale_id=sale.id,
+                        customer_id=sale.customer_id,
+                        transaction_type='Issued',
+                        quantity=quantity,
+                        unit_value=unit.cost_price or 0,
+                        status=1
+                    )
+                    cont_txn.calculate_total_value()
+                    db.session.add(cont_txn)
+                    container_id = container.id
+
+                bottle_unit = ProductUnit.query.filter_by(product_id=product_id, conversion_quantity=1).first()
+                bottle_txn = BottleTransaction(
+                    container_id=container_id,
+                    product_unit_id=unit.id,
+                    sale_id=sale.id,
+                    transaction_type='Issued',
+                    quantity=consumption_qty,
+                    unit_value=bottle_unit.cost_price if bottle_unit else 0,
+                    status=1
+                )
+                bottle_txn.calculate_total_value()
+                db.session.add(bottle_txn)
+
+            # --- Inventory transaction ---
+            db.session.add(InventoryTransaction(
+                transaction_no=txn_id,
+                product_id=product.id,
+                purchase_order_id=None,
+                quantity=consumption_qty,
+                unit_price=unit_price,
+                total_price=total_price,
+                transaction_type='Sale',
+                status=1
+            ))
+
+            # Reduce stock
+            product.quantity -= consumption_qty
+            db.session.add(product)
+
+            # COGS
+            latest_purchase = (PurchaseOrderItem.query
+                               .filter(PurchaseOrderItem.product_id == product.id,
+                                       PurchaseOrderItem.unit_id == unit_id)
+                               .order_by(PurchaseOrderItem.created_at.desc())
+                               .first())
+            purchase_price = latest_purchase.unit_price if latest_purchase else 0.0
+            cogs_total += purchase_price * consumption_qty
+            total_amount += total_price
+
+            # --- SaleItem ---
+            sale_item = SaleItem(
+                sale_id=sale.id,
+                product_id=product.id,
+                product_name=product.name,
+                quantity=quantity,
+                unit_price=unit_price,
+                total_price=total_price,
+                unit_id=unit_id,
+                status=1
+            )
+            db.session.add(sale_item)
+
+        # --- Final Sale calculations ---
+        sale.total_amount = total_amount
+        balance = total_amount - amount_paid
+
+        if amount_paid == 0:
+            sale.status = 3  # Credit
+        elif 0 < balance <= 100:
+            sale.status = 1
+            balance = 0
+        elif 0 < amount_paid < total_amount and balance > 100:
+            sale.status = 4  # Partial
+        else:
+            sale.status = 1  # Paid
+
+        sale.balance = round(balance, 2)
+        db.session.flush()
+
+        # --- Ledger posting ---
+        credit_account_code = 1100
+        if payment_account_id:
+            payment_account = Account.query.get(payment_account_id)
+            if not payment_account:
+                return jsonify({"error": "Invalid payment account"}), 400
+            credit_account_code = payment_account.code
+
+        entries = []
+        if amount_paid > 0:
+            if amount_paid >= total_amount:
+                entries = [
+                    {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
+                    {"account_id": 4010, "transaction_type": "Credit", "amount": amount_paid},
+                    {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
+                    {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+                ]
+            else:
+                entries = [
+                    {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
+                    {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount - amount_paid},
+                    {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
+                    {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
+                    {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+                ]
+        else:
+            entries = [
+                {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount},
+                {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
+                {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
+                {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+            ]
+
+        gl_entries = post_to_ledger(entries, transaction_no_id=txn_id,
+                                    description=f"Sale #{sale.id}", transaction_date=sale_date)
+        sale.transaction_no = txn_id
+
+        # --- Payment ---
+        if amount_paid > 0:
+            payment = Payment(
+                sale_id=sale.id,
+                amount=amount_paid,
+                payment_type=payment_type,
+                reference=data.get("memo", txn_str),
+                payment_date=sale_date,
+                payment_account_id=payment_account_id,
+                status=1,
+                transaction_no=txn_id
+            )
+            db.session.add(payment)
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"Sale {'updated' if sale_id else 'created'} successfully",
+            "sale_id": sale.id,
+            "total_amount": sale.total_amount,
+            "total_paid": sale.total_paid,
+            "balance": sale.balance,
+            "payment_status": sale.status,
+            "transaction_no": txn_str,
+            "sale_date": sale.sale_date.strftime("%Y-%m-%d")
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 
 # ------------------ Get All Sales ------------------ #
 @token_required
@@ -1016,123 +1379,6 @@ def get_returnable_summary_for_customer(customer_id):
     return jsonify(result), 200
 
 
-# @token_required
-# @sales_bp.route('/returnable/summary/customer/<int:customer_id>', methods=['GET'])
-# def get_returnable_summary_for_customer(customer_id):
-#     """
-#     Returns both:
-#     - Crates (Issued & Returned)
-#     - Bottles (Issued but Not Returned)
-#     for a specific customer, per product.
-#     """
-#     result = []
-
-#     # --- Helper to resolve customer ---
-#     def resolve_customer(txn):
-#         if txn.customer:
-#             return txn.customer
-#         elif getattr(txn, "sale_id", None):
-#             sale = Sale.query.get(txn.sale_id)
-#             if sale and sale.customer:
-#                 return sale.customer
-#         return None
-
-#     # --- 1️⃣ Fetch Crate Transactions ---
-#     crate_txns = ContainerTransaction.query.filter(
-#         ContainerTransaction.transaction_type.in_(['Issued', 'Returned']),
-#         ContainerTransaction.status == 1
-#     ).all()
-
-#     crate_summary = {}
-
-#     for txn in crate_txns:
-#         customer = resolve_customer(txn)
-#         if not customer or customer.id != customer_id:
-#             continue
-
-#         container = txn.container
-#         product_unit = getattr(container, 'product_unit', None)
-#         product = product_unit.product if product_unit else None
-#         if not product:
-#             continue
-
-#         key = (customer.id, container.id)
-#         if key not in crate_summary:
-#             crate_summary[key] = {
-#                 "type": "Crate",
-#                 "customer_id": customer.id,
-#                 "customer_name": customer.name,
-#                 "product_name": product.name,
-#                 "container_name": container.name,
-#                 "quantity_issued": 0,
-#                 "quantity_returned": 0,
-#                 # "quantity_sold":0
-#             }
-
-#         if txn.transaction_type == 'Issued':
-#             crate_summary[key]["quantity_issued"] += txn.quantity
-#         elif txn.transaction_type == 'Returned':
-#             crate_summary[key]["quantity_returned"] += txn.quantity
-#         # elif txn.transaction_type == 'Sold':
-#         #     crate_summary[key]["quantity_sold"] += txn.quantity
-
-#     # --- 2️⃣ Fetch Bottle Transactions (only show those not fully returned) ---
-#     bottle_txns = BottleTransaction.query.filter(
-#         BottleTransaction.transaction_type.in_(['Issued', 'Returned']),
-#         BottleTransaction.status == 1
-#     ).all()
-
-#     bottle_summary = {}
-
-#     for txn in bottle_txns:
-#         customer = resolve_customer(txn)
-#         if not customer or customer.id != customer_id:
-#             continue
-
-#         container = txn.container
-#         product_unit = txn.product_unit
-#         product = product_unit.product if product_unit else None
-#         if not product:
-#             continue
-
-#         key = (customer.id, product_unit.id)
-#         if key not in bottle_summary:
-#             bottle_summary[key] = {
-#                 "type": "Bottle",
-#                 "customer_id": customer.id,
-#                 "customer_name": customer.name,
-#                 "product_name": product.name,
-#                 "unit_name": product_unit.unit_name,
-#                 "container_name": container.name if container else None,
-#                 "quantity_issued": 0,
-#                 "quantity_returned": 0,
-#                 # "quantity_sold":0
-
-#             }
-
-#         if txn.transaction_type == 'Issued':
-#             bottle_summary[key]["quantity_issued"] += txn.quantity
-#         elif txn.transaction_type == 'Returned':
-#             bottle_summary[key]["quantity_returned"] += txn.quantity
-#         # elif txn.transaction_type == 'Sold':
-#         #     bottle_summary[key]["quantity_sold"] += txn.quantity
-
-#     # --- 3️⃣ Prepare result list ---
-#     for s in crate_summary.values():
-#         s["quantity_not_returned"] = s["quantity_issued"] - s["quantity_returned"]
-
-#     for s in bottle_summary.values():
-#         not_returned = s["quantity_issued"] - s["quantity_returned"]
-#         if not_returned > 0:
-#             s["quantity_not_returned"] = not_returned
-#             result.append(s)
-
-#     # Sort by type then product
-#     result.sort(key=lambda x: (x["type"], x["product_name"]))
-
-#     return jsonify(result), 200
-
-
 
 @token_required
 @sales_bp.route('/returnable/return', methods=['POST'])
@@ -1411,307 +1657,6 @@ def get_pending_crates_for_sale(sale_id):
     return max(total_sold - total_returned, 0)
 
 
-# @token_required
-# @sales_bp.route('/returnable/auto_return', methods=['POST'])
-# def auto_returnable_for_customer():
-#     """
-#     Automatically apply returned and damaged crates/bottles for a customer
-#     across all sales with pending returnables (FIFO).
-#     User provides:
-#       - customer_id
-#       - bottles_returned
-#       - crates_returned
-#       - bottles_damaged (optional)
-#       - crates_damaged (optional)
-#     """
-#     data = request.json
-#     customer_id = data.get("customer_id")
-
-#     bottles_returned = data.get("bottles_returned", 0)
-#     crates_returned = data.get("crates_returned", 0)
-#     bottles_damaged = data.get("bottles_damaged", 0)
-#     crates_damaged = data.get("crates_damaged", 0)
-
-#     if not customer_id:
-#         return jsonify({"error": "customer_id is required"}), 400
-
-#     if all(x <= 0 for x in [bottles_returned, crates_returned, bottles_damaged, crates_damaged]):
-#         return jsonify({"error": "At least one of the return/damage quantities must be > 0"}), 400
-
-#     customer = Customer.query.get(customer_id)
-#     if not customer:
-#         return jsonify({"error": f"Customer ID {customer_id} not found"}), 404
-
-#     try:
-#         # Step 1️⃣: Get all sales for this customer with pending returnables
-#         pending_sales = (
-#             db.session.query(Sale)
-#             .filter(Sale.customer_id == customer_id, Sale.status == 1)
-#             .order_by(Sale.sale_date.asc())
-#             .all()
-#         )
-
-#         if not pending_sales:
-#             return jsonify({"message": "No pending sales for this customer"}), 200
-
-#         total_bottles_applied = 0
-#         total_crates_applied = 0
-#         total_bottles_damaged_applied = 0
-#         total_crates_damaged_applied = 0
-
-#         # Step 2️⃣: Apply returns/damages FIFO across pending sales
-#         for sale in pending_sales:
-#             applied_bottles, applied_crates, applied_bottles_damaged, applied_crates_damaged = apply_return_for_sale(
-#                 sale,
-#                 customer,
-#                 bottles_to_return=bottles_returned,
-#                 crates_to_return=crates_returned,
-#                 bottles_damaged=bottles_damaged,
-#                 crates_damaged=crates_damaged
-#             )
-
-#             total_bottles_applied += applied_bottles
-#             total_crates_applied += applied_crates
-#             total_bottles_damaged_applied += applied_bottles_damaged
-#             total_crates_damaged_applied += applied_crates_damaged
-
-#             # Reduce remaining quantities to allocate to next sales
-#             bottles_returned -= applied_bottles
-#             crates_returned -= applied_crates
-#             bottles_damaged -= applied_bottles_damaged
-#             crates_damaged -= applied_crates_damaged
-
-#             # Stop if all quantities have been allocated
-#             if all(x <= 0 for x in [bottles_returned, crates_returned, bottles_damaged, crates_damaged]):
-#                 break
-
-#         db.session.commit()
-
-#         return jsonify({
-#             "message": "Returnable items automatically applied successfully",
-#             "customer_name": customer.name,
-#             "total_crates_applied": total_crates_applied,
-#             "total_bottles_applied": total_bottles_applied,
-#             "total_crates_damaged_applied": total_crates_damaged_applied,
-#             "total_bottles_damaged_applied": total_bottles_damaged_applied
-#         }), 201
-
-#     except Exception as e:
-#         db.session.rollback()
-#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-
-# @token_required
-# @sales_bp.route('/returnable/auto_return', methods=['POST'])
-# def auto_returnable_for_customer():
-#     """
-#     Automatically apply returned and damaged crates/bottles for a customer
-#     across all sales with pending returnables (FIFO).
-#     User provides:
-#       - customer_id
-#       - items: [
-#             {
-#                 product_unit_id (optional),
-#                 container_id (optional),
-#                 bottles_returned,
-#                 crates_returned,
-#                 bottles_damaged,
-#                 crates_damaged
-#             },
-#             ...
-#         ]
-#     """
-#     data = request.json
-#     customer_id = data.get("customer_id")
-#     items = data.get("items", [])
-
-#     if not customer_id:
-#         return jsonify({"error": "customer_id is required"}), 400
-
-#     if not items or all(
-#         all(x <= 0 for x in [
-#             item.get("bottles_returned", 0),
-#             item.get("crates_returned", 0),
-#             item.get("bottles_damaged", 0),
-#             item.get("crates_damaged", 0)
-#         ]) for item in items
-#     ):
-#         return jsonify({"error": "At least one of the return/damage quantities must be > 0"}), 400
-
-#     customer = Customer.query.get(customer_id)
-#     if not customer:
-#         return jsonify({"error": f"Customer ID {customer_id} not found"}), 404
-
-#     try:
-#         # Step 1️⃣: Get all sales for this customer with pending returnables
-#         pending_sales = (
-#             db.session.query(Sale)
-#             .filter(Sale.customer_id == customer_id, Sale.status.in_([1, 2, 3, 4] ))
-#             .order_by(Sale.sale_date.asc())
-#             .all()
-#         )
-
-#         if not pending_sales:
-#             return jsonify({"message": "No pending sales for this customer"}), 200
-
-#         total_bottles_applied = 0
-#         total_crates_applied = 0
-#         total_bottles_damaged_applied = 0
-#         total_crates_damaged_applied = 0
-
-#         # Step 2️⃣: Apply returns/damages FIFO for each item
-#         for item in items:
-#             bottles_returned = item.get("bottles_returned", 0)
-#             crates_returned = item.get("crates_returned", 0)
-#             bottles_damaged = item.get("bottles_damaged", 0)
-#             crates_damaged = item.get("crates_damaged", 0)
-#             product_unit_id = item.get("product_unit_id")
-#             container_id = item.get("container_id")
-
-#             if all(x <= 0 for x in [bottles_returned, crates_returned, bottles_damaged, crates_damaged]):
-#                 continue  # skip this item
-
-#             # Apply FIFO logic per sale
-#             for sale in pending_sales:
-#                 applied_bottles, applied_crates, applied_bottles_damaged, applied_crates_damaged = apply_return_for_sale(
-#                     sale,
-#                     customer,
-#                     # product_unit_id=product_unit_id,
-#                     # container_id=container_id,
-#                     bottles_to_return=bottles_returned,
-#                     crates_to_return=crates_returned,
-#                     bottles_damaged=bottles_damaged,
-#                     crates_damaged=crates_damaged
-#                 )
-
-#                 total_bottles_applied += applied_bottles
-#                 total_crates_applied += applied_crates
-#                 total_bottles_damaged_applied += applied_bottles_damaged
-#                 total_crates_damaged_applied += applied_crates_damaged
-
-#                 # Reduce remaining quantities to allocate to next sales
-#                 bottles_returned -= applied_bottles
-#                 crates_returned -= applied_crates
-#                 bottles_damaged -= applied_bottles_damaged
-#                 crates_damaged -= applied_crates_damaged
-
-#                 # Stop if all quantities have been allocated for this item
-#                 if all(x <= 0 for x in [bottles_returned, crates_returned, bottles_damaged, crates_damaged]):
-#                     break
-
-#         db.session.commit()
-
-#         return jsonify({
-#             "message": "Returnable items automatically applied successfully",
-#             "customer_name": customer.name,
-#             "total_crates_applied": total_crates_applied,
-#             "total_bottles_applied": total_bottles_applied,
-#             "total_crates_damaged_applied": total_crates_damaged_applied,
-#             "total_bottles_damaged_applied": total_bottles_damaged_applied
-#         }), 201
-
-#     except Exception as e:
-#         db.session.rollback()
-#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-
-# def apply_return_for_sale(
-#     sale, 
-#     customer, 
-#     bottles_to_return=0, 
-#     crates_to_return=0, 
-#     bottles_damaged=0, 
-#     crates_damaged=0
-# ):
-#     """
-#     Apply returned and damaged crates/bottles for a single sale.
-#     Properly updates Container and ProductUnit stock.
-#     Returns applied quantities for each category.
-#     """
-#     applied_bottles = 0
-#     applied_crates = 0
-#     applied_bottles_damaged = 0
-#     applied_crates_damaged = 0
-
-#     # --- Containers linked to sale's product units ---
-#     sale_items = SaleItem.query.filter_by(sale_id=sale.id).all()
-
-#     for item in sale_items:
-#         # --- Handle Crates ---
-#         containers = ReturnableContainer.query.filter_by(product_unit_id=item.unit_id).all()
-#         for container in containers:
-#             pending_crates = max(0, container.total_issued - container.total_returned - container.total_damaged)
-#             if crates_to_return > 0 and pending_crates > 0:
-#                 qty = min(crates_to_return, pending_crates)
-#                 txn = ContainerTransaction(
-#                     container_id=container.id,
-#                     sale_id=sale.id,
-#                     customer_id=customer.id,
-#                     transaction_type="Returned",
-#                     quantity=qty,
-#                     timestamp=datetime.utcnow(),
-#                     status=1
-#                 )
-#                 db.session.add(txn)
-#                 container.process_transaction('Returned', qty)
-#                 applied_crates += qty
-#                 crates_to_return -= qty
-
-#             if crates_damaged > 0 and pending_crates > 0:
-#                 qty = min(crates_damaged, pending_crates)
-#                 txn = ContainerTransaction(
-#                     container_id=container.id,
-#                     sale_id=sale.id,
-#                     customer_id=customer.id,
-#                     transaction_type="Damaged",
-#                     quantity=qty,
-#                     timestamp=datetime.utcnow(),
-#                     status=1
-#                 )
-#                 db.session.add(txn)
-#                 container.process_transaction('Damaged', qty)
-#                 applied_crates_damaged += qty
-#                 crates_damaged -= qty
-
-#         # --- Handle Bottles ---
-#         pending_bottles = get_pending_bottles_for_sale(sale.id)
-#         if bottles_to_return > 0 and pending_bottles > 0:
-#             qty = min(bottles_to_return, pending_bottles)
-#             txn = BottleTransaction(
-#                 container_id=None,
-#                 product_unit_id=item.unit_id,
-#                 sale_id=sale.id,
-#                 customer_id=customer.id,
-#                 transaction_type="Returned",
-#                 quantity=qty,
-#                 unit_value=item.unit_price,
-#                 timestamp=datetime.utcnow(),
-#                 status=1
-#             )
-#             txn.calculate_total_value()
-#             db.session.add(txn)
-#             applied_bottles += qty
-#             bottles_to_return -= qty
-
-#         if bottles_damaged > 0 and pending_bottles > 0:
-#             qty = min(bottles_damaged, pending_bottles)
-#             txn = BottleTransaction(
-#                 container_id=None,
-#                 product_unit_id=item.unit_id,
-#                 sale_id=sale.id,
-#                 customer_id=customer.id,
-#                 transaction_type="Damaged",
-#                 quantity=qty,
-#                 unit_value=item.unit_price,
-#                 timestamp=datetime.utcnow(),
-#                 status=1
-#             )
-#             txn.calculate_total_value()
-#             db.session.add(txn)
-#             applied_bottles_damaged += qty
-#             bottles_damaged -= qty
-
-#     return applied_bottles, applied_crates, applied_bottles_damaged, applied_crates_damaged
 
 
 @token_required
