@@ -357,6 +357,8 @@ const selectUnit = (unitId, idx) => {
   item.selectedUnitObj = selected
   item.retail_price = selected.retail_price ?? 0
   item.wholesale_price = selected.wholesale_price ?? 0
+  item.unit_price = selected.wholesale_price ?? 0
+
   calculateTotal(item)
 }
 
