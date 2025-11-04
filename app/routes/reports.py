@@ -1466,8 +1466,6 @@ def balance_sheet_report():
             "is_balanced": balance_check == 0
         }
     })
-
-
 @token_required
 @reports_bp.route("/sales", methods=["GET"])
 def sales_report():
@@ -1512,7 +1510,6 @@ def sales_report():
     total_sales = total_profit = total_balance = total_cost = total_paid = 0
 
     for sale in sales:
-        # --- Compute totals ---
         total_amount = sum(item.total_price for item in sale.items if item.status != 9)
         total_paid_amount = sale.total_paid or 0
         balance = total_amount - total_paid_amount
@@ -1529,13 +1526,14 @@ def sales_report():
             if not product:
                 continue
 
+            # --- Category ---
             category_name = None
             if product.category_id:
                 category = db.session.query(Category).filter_by(id=product.category_id, status=1).first()
                 if category:
                     category_name = category.name
 
-            # --- Get product unit info ---
+            # --- Unit info ---
             unit_name = None
             conversion_qty = 1
             is_returnable = False
@@ -1544,38 +1542,55 @@ def sales_report():
                 if unit:
                     unit_name = unit.unit_name
                     conversion_qty = unit.conversion_quantity or 1
-                    is_returnable = unit.is_returnable  # Assuming you have this column
+                    is_returnable = unit.is_returnable
 
             # --- Convert quantity back to base unit if returnable ---
             actual_qty = item.quantity
             if is_returnable:
                 actual_qty = item.quantity * conversion_qty
-            
-            # --- Get last purchase price for this product/unit ---
-            last_purchase = (
-                PurchaseOrderItem.query
-                .filter(
-                    PurchaseOrderItem.product_id == product.id,
-                    PurchaseOrderItem.status == 1,
-                    # Optional: filter by unit_id if needed
-                    PurchaseOrderItem.unit_id == item.unit_id if item.unit_id else True
+
+            # --- Get last purchase price ---
+            last_purchase = None
+            is_base_unit = True
+            if item.unit_id:
+
+                # Try to find exact unit purchase before sale date
+                last_purchase = (
+                    PurchaseOrderItem.query
+                    .filter(
+                        PurchaseOrderItem.product_id == product.id,
+                        PurchaseOrderItem.status == 1,
+                        PurchaseOrderItem.unit_id == item.unit_id,
+                        PurchaseOrderItem.created_at <= (end_date or datetime.utcnow())
+                    )
+                    .order_by(PurchaseOrderItem.created_at.desc())
+                    .first()
                 )
-                .order_by(PurchaseOrderItem.created_at.desc())
-                .first()
-            )
-            last_purchase_price = float(last_purchase.unit_price or 0) if last_purchase else 0
 
-            # last_purchase_price= last_purchase_price/conversion_qty
+            if not last_purchase:
+                is_base_unit=False
+                # Fallback: use base unit purchase and divide by conversion
+                base_purchase = (
+                    PurchaseOrderItem.query
+                    .filter(
+                        PurchaseOrderItem.product_id == product.id,
+                        PurchaseOrderItem.status == 1,
+                        PurchaseOrderItem.unit_id.is_(None),
+                        PurchaseOrderItem.created_at <= (end_date or datetime.utcnow())
+                    )
+                    .order_by(PurchaseOrderItem.created_at.desc())
+                    .first()
+                )
+                if base_purchase and conversion_qty > 0:
+                    last_purchase_price = float(base_purchase.unit_price or 0) / conversion_qty
+                else:
+                    last_purchase_price = 0
+            else:
+                last_purchase_price = float(last_purchase.unit_price or 0)
 
-
-            # last_purchase_price = last_purchase.unit_price if last_purchase else 0
-            
-
-            unit_cost = round(last_purchase_price or 0)
-            
+            unit_cost = round(last_purchase_price, 2) 
             unit_selling = float(item.unit_price or 0)
-
-            profit = (unit_selling - unit_cost) * actual_qty
+            profit = (unit_selling - unit_cost) * item.quantity if is_base_unit else  (unit_selling - unit_cost) * actual_qty 
             cost_value = unit_cost * actual_qty
 
             total_cost_price += cost_value
@@ -1598,7 +1613,6 @@ def sales_report():
         customer_name = sale.customer.name if sale.customer else "Walk-in Customer"
         customer_phone = getattr(sale.customer, "phone", "")
 
-        # --- Prepare sale entry ---
         sale_entry = {
             "sale_id": sale.id,
             "sale_number": sale.sale_number,
@@ -1614,7 +1628,7 @@ def sales_report():
             "items": sale_items_data
         }
 
-        # Optional filter by category (post-filter)
+        # --- Category filter ---
         if category_id:
             if not any(
                 Product.query.get(i["product_id"]).category_id == category_id for i in sale_items_data
@@ -1623,14 +1637,12 @@ def sales_report():
 
         report_data.append(sale_entry)
 
-        # --- Accumulate totals ---
         total_sales += total_amount
         total_profit += total_profit_loss
         total_balance += balance
         total_cost += total_cost_price
         total_paid += total_paid_amount
 
-    # --- Summary totals ---
     summary = {
         "total_sales": round(total_sales, 2),
         "total_cost": round(total_cost, 2),
@@ -1648,6 +1660,188 @@ def sales_report():
         "summary": summary,
         "data": report_data
     })
+
+
+# @token_required
+# @reports_bp.route("/sales", methods=["GET"])
+# def sales_report():
+#     """
+#     Returns sales report for a given date range.
+#     Includes profit/loss per sale, customer details, category/unit info,
+#     and indicates outstanding balances.
+#     Optionally filters by customer_id or category.
+#     """
+
+#     # --- Parse filters ---
+#     start_date_str = request.args.get("start_date")
+#     end_date_str = request.args.get("end_date")
+#     customer_id = request.args.get("customer_id", type=int)
+#     category_id = request.args.get("category_id", type=int)
+
+#     try:
+#         start_date = datetime.strptime(start_date_str, "%Y-%m-%d") if start_date_str else None
+#         end_date = datetime.strptime(end_date_str, "%Y-%m-%d") if end_date_str else None
+#     except ValueError:
+#         return jsonify({"error": "Dates must be in YYYY-MM-DD format"}), 400
+
+#     # --- Base filters ---
+#     filters = [Sale.status != 9]
+#     if start_date:
+#         filters.append(Sale.sale_date >= start_date)
+#     if end_date:
+#         filters.append(Sale.sale_date <= end_date)
+#     if customer_id:
+#         filters.append(Sale.customer_id == customer_id)
+
+#     # --- Fetch all sales ---
+#     sales = (
+#         db.session.query(Sale)
+#         .options(joinedload(Sale.items), joinedload(Sale.customer))
+#         .filter(*filters)
+#         .order_by(Sale.sale_date.desc())
+#         .all()
+#     )
+
+#     report_data = []
+#     total_sales = total_profit = total_balance = total_cost = total_paid = 0
+
+#     for sale in sales:
+#         # --- Compute totals ---
+#         total_amount = sum(item.total_price for item in sale.items if item.status != 9)
+#         total_paid_amount = sale.total_paid or 0
+#         balance = total_amount - total_paid_amount
+
+#         total_cost_price = 0
+#         total_profit_loss = 0
+#         sale_items_data = []
+
+#         for item in sale.items:
+#             if item.status == 9:
+#                 continue
+
+#             product = Product.query.get(item.product_id)
+#             if not product:
+#                 continue
+
+#             category_name = None
+#             if product.category_id:
+#                 category = db.session.query(Category).filter_by(id=product.category_id, status=1).first()
+#                 if category:
+#                     category_name = category.name
+
+#             # --- Get product unit info ---
+#             unit_name = None
+#             conversion_qty = 1
+#             is_returnable = False
+#             if item.unit_id:
+#                 unit = ProductUnit.query.get(item.unit_id)
+#                 if unit:
+#                     unit_name = unit.unit_name
+#                     conversion_qty = unit.conversion_quantity or 1
+#                     is_returnable = unit.is_returnable  # Assuming you have this column
+
+#             # --- Convert quantity back to base unit if returnable ---
+#             actual_qty = item.quantity
+#             if is_returnable:
+#                 actual_qty = item.quantity * conversion_qty
+            
+#             # --- Get last purchase price for this product/unit ---
+#             last_purchase = (
+#                 PurchaseOrderItem.query
+#                 .filter(
+#                     PurchaseOrderItem.product_id == product.id,
+#                     PurchaseOrderItem.status == 1,
+#                     # Optional: filter by unit_id if needed
+#                     PurchaseOrderItem.unit_id == item.unit_id if item.unit_id else True
+#                 )
+#                 .order_by(PurchaseOrderItem.created_at.desc())
+#                 .first()
+#             )
+#             last_purchase_price = float(last_purchase.unit_price or 0) if last_purchase else 0
+
+#             # last_purchase_price= last_purchase_price/conversion_qty
+
+
+#             # last_purchase_price = last_purchase.unit_price if last_purchase else 0
+            
+
+#             unit_cost = round(last_purchase_price or 0)
+            
+#             unit_selling = float(item.unit_price or 0)
+
+#             profit = (unit_selling - unit_cost) * actual_qty
+#             cost_value = unit_cost * actual_qty
+
+#             total_cost_price += cost_value
+#             total_profit_loss += profit
+
+#             sale_items_data.append({
+#                 "product_id": product.id,
+#                 "product_name": product.name,
+#                 "category": category_name,
+#                 "unit_name": unit_name,
+#                 "quantity": item.quantity,
+#                 "converted_quantity": actual_qty,
+#                 "unit_price": unit_selling,
+#                 "cost_price": unit_cost,
+#                 "total_price": item.total_price,
+#                 "profit": profit
+#             })
+
+#         # --- Customer info ---
+#         customer_name = sale.customer.name if sale.customer else "Walk-in Customer"
+#         customer_phone = getattr(sale.customer, "phone", "")
+
+#         # --- Prepare sale entry ---
+#         sale_entry = {
+#             "sale_id": sale.id,
+#             "sale_number": sale.sale_number,
+#             "sale_date": sale.sale_date.strftime("%Y-%m-%d"),
+#             "customer_name": customer_name,
+#             "customer_phone": customer_phone,
+#             "total_amount": round(total_amount, 2),
+#             "total_cost": round(total_cost_price, 2),
+#             "profit_loss": round(total_profit_loss, 2),
+#             "amount_paid": round(total_paid_amount, 2),
+#             "balance": round(balance, 2),
+#             "status": sale.payment_status,
+#             "items": sale_items_data
+#         }
+
+#         # Optional filter by category (post-filter)
+#         if category_id:
+#             if not any(
+#                 Product.query.get(i["product_id"]).category_id == category_id for i in sale_items_data
+#             ):
+#                 continue
+
+#         report_data.append(sale_entry)
+
+#         # --- Accumulate totals ---
+#         total_sales += total_amount
+#         total_profit += total_profit_loss
+#         total_balance += balance
+#         total_cost += total_cost_price
+#         total_paid += total_paid_amount
+
+#     # --- Summary totals ---
+#     summary = {
+#         "total_sales": round(total_sales, 2),
+#         "total_cost": round(total_cost, 2),
+#         "total_profit_loss": round(total_profit, 2),
+#         "total_paid": round(total_paid, 2),
+#         "total_balance": round(total_balance, 2),
+#     }
+
+#     return jsonify({
+#         "period": {
+#             "start_date": start_date_str,
+#             "end_date": end_date_str
+#         },
+#         "sales_count": len(report_data),
+#         "summary": summary,
+#         "data": report_data
+#     })
 
 
 
