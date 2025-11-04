@@ -96,7 +96,7 @@
 
 
             <!-- Unit -->
-            <td class="p-2 border text-center">
+            <td class="p-2 border text-center text-base w-48">
               <select
                 v-if="item.units?.length"
                 v-model="item.selectedUnitId"
@@ -142,7 +142,7 @@
 
 
             <!-- Editable Cost -->
-            <td class="p-2 border text-right">
+            <td class="p-2 border text-right text-base w-48">
               <input
                 type="number"
                 min="0"
@@ -158,7 +158,7 @@
             <td class="p-2 border text-right">{{ formatPrice(item.retail_price) }}</td>
 
             <!-- Quantity -->
-            <td class="p-2 border">
+            <td class="p-2 border text-base w-48">
               <input
                 type="number"
                 min="0"
@@ -326,6 +326,7 @@ const onProductSelect = async (product, idx) => {
     item.quantity = 0
     item.total_price = 0
     item.container = null
+    item.rate =0 
     return
   }
 
@@ -359,6 +360,7 @@ const onUnitSelect = (idx) => {
   item.retail_price = unit.retail_price ?? 0
   item.is_returnable = unit.is_returnable ?? false
   item.container = unit.container || null
+  item.rate =0 
   calculateTotal(item)
 }
 const recalculateQuantityRate = (item) => {

@@ -102,20 +102,21 @@ def generate_transaction_number_partone(prefix, transaction_date=None, status=1)
 
     tn = TransactionNumber.query.filter_by(prefix=prefix).first()
 
-    if not tn:
-        tn = TransactionNumber(
-            prefix=prefix,
-            last_number=1,
-            status=status,
-            transaction_date=transaction_date
-        )
-        db.session.add(tn)
-        db.session.flush()  # <-- ensure ID is available
-    else:
-        tn.last_number += 1
-        db.session.flush()
+    # if not tn:
+    tn = TransactionNumber(
+        prefix=prefix,
+        last_number=1,
+        status=status,
+        transaction_date=transaction_date
+    )
+    db.session.add(tn)
+    db.session.flush()  # <-- Ensure ID is available before commit
+    # else:
+    #     tn.last_number += 1
+    #     db.session.flush()
 
     txn_str = f"{prefix}-{str(tn.last_number).zfill(5)}"
 
+    db.session.commit()  # <-- Final commit
     return tn.id, txn_str
 
