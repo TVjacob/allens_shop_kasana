@@ -87,6 +87,13 @@
               >
                 Delete
               </button>
+              <button
+                  @click="editSale(sale)"
+                  class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg transition"
+                >
+                  Edit
+                </button>
+
             </td>
           </tr>
 
@@ -129,6 +136,14 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import PaymentModal from './PaymentModal.vue';
 import ReportModal from './ReportModal.vue';
+import { useRouter } from 'vue-router';
+const router = useRouter();
+
+const editSale = (sale) => {
+  // Navigate to sales report or edit page
+  router.push(`/editsales/${sale.sale_id}`);
+};
+
 
 const currentTab = ref('unpaid');
 const sales = ref([]);

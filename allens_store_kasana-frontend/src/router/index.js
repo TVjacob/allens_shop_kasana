@@ -39,6 +39,8 @@ import CustomeReturns from '@/pages/CustomeReturns.vue';
 import ReturnablesForm from '@/pages/ReturnablesForm.vue';
 import SalesProfitLoss from '@/pages/reports/SalesProfitLoss.vue';
 import CustomerManagement from '@/pages/CustomerManagement.vue';
+import EditSale from '@/pages/EditSale.vue';
+// import EditSale from '@/pages/EditSale.vue';
 
 const routes = [
   {
@@ -52,6 +54,13 @@ const routes = [
       { path: 'products', component: Products, meta: { showGreeting: true, pageName: 'Products',requiresAuth: true, } },
       { path: 'customers', component: Customer, meta: { showGreeting: false, pageName: 'Customers',requiresAuth: true, } },
       { path: 'sales', component: Sales, meta: { showGreeting: false, pageName: 'Sales',requiresAuth: true, } },
+      { path: '/editsale', component: EditSale, meta: { showGreeting: false, pageName: 'EditSale',requiresAuth: true, } },
+      {
+        path: '/editsales/:id',
+        name: 'Edit Sale',
+        component: EditSale,
+        meta: { showGreeting: false, pageName: 'Edit Sale', requiresAuth: true,}
+      },
       { path: 'purchases', component: Purchases, meta: { showGreeting: true, pageName: 'Purchases',requiresAuth: true, } },
       { path: 'expenses', component: Expenses, meta: { showGreeting: false, pageName: 'Expenses',requiresAuth: true, } },
       { path: 'reports/expenses/:id', component: ExpenseDetailsReport, meta: { showGreeting: false, pageName: 'Expenses Details',requiresAuth: true, } },

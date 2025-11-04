@@ -111,6 +111,7 @@ def add_payment():
         "sale_status": sale.payment_status,
         "total_paid": sale.total_paid,
         "balance": sale.balance
+        
     }), 201
 
 # ------------------ Get Payment by ID ------------------

@@ -369,8 +369,424 @@ def delete_sale_permanently(sale_id):
 
 
 
+# @token_required
+# @sales_bp.route('/edit', methods=['PUT'])
+# def create_or_update_sale():
+#     data = request.json
+
+#     try:
+#         sale_id = data.get("sale_id")  # Optional for updates
+#         items = data.get('items', [])
+#         amount_paid = float(data.get('amount_paid', 0))
+#         payment_account_id = data.get('payment_account_id')
+#         sale_date_str = data.get("sale_date")
+#         payment_type = data.get('payment_type', 'Cash')
+
+#         if not items:
+#             return jsonify({"error": "At least one item is required"}), 400
+
+#         # --- Parse sale date ---
+#         try:
+#             sale_date = datetime.strptime(sale_date_str, "%Y-%m-%d") if sale_date_str else datetime.utcnow()
+#         except ValueError:
+#             return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+
+#         # --- If updating, delete previous sale first ---
+#         if sale_id:
+#             from flask import current_app
+#             current_app.logger.info(f"Updating sale #{sale_id}: reversing previous sale.")
+#             # Call the delete logic from before
+#             delete_sale_permanently(sale_id)
+
+#         # --- Initialize totals ---
+#         total_amount = 0
+#         cogs_total = 0
+#         txn_id, txn_str = generate_transaction_number_partone('INV', transaction_date=sale_date)
+
+#         # --- Create new Sale record ---
+#         sale = Sale(
+#             sale_number=txn_str,
+#             customer_id=data.get("customer_id", 1),
+#             total_paid=amount_paid,
+#             status=1,
+#             sale_date=sale_date
+#         )
+#         db.session.add(sale)
+#         db.session.flush()
+
+#         # --- Process Sale Items ---
+#         for idx, item_data in enumerate(items, start=1):
+#             product_id = item_data.get("product_id")
+#             unit_id = item_data.get("unit_id")
+#             quantity = float(item_data.get("quantity", 0))
+#             unit_price = float(item_data.get("unit_price", 0))
+#             total_price = float(item_data.get("total_price", unit_price * quantity))
+
+#             if not product_id or not unit_id:
+#                 return jsonify({"error": f"Product ID and Unit ID are required for item #{idx}"}), 400
+
+#             product = Product.query.get(product_id)
+#             if not product:
+#                 return jsonify({"error": f"Product with ID {product_id} not found for item #{idx}"}), 404
+
+#             unit = ProductUnit.query.get(unit_id)
+#             if not unit or unit.product_id != product.id:
+#                 return jsonify({"error": f"Invalid unit {unit_id} for product {product.name}"}), 400
+
+#             consumption_qty = quantity * (unit.conversion_quantity or 1)
+#             if product.quantity < consumption_qty:
+#                 return jsonify({"error": f"Insufficient stock for {product.name}. Required {consumption_qty}, available {product.quantity}"}), 400
+
+#             # --- Handle returnable containers ---
+#             if unit.is_returnable:
+#                 container = ReturnableContainer.query.filter_by(product_unit_id=unit.id).first()
+#                 container_id = None
+#                 if container:
+#                     container.process_transaction('Issued', quantity)
+#                     db.session.add(container)
+
+#                     cont_txn = ContainerTransaction(
+#                         container_id=container.id,
+#                         sale_id=sale.id,
+#                         customer_id=sale.customer_id,
+#                         transaction_type='Issued',
+#                         quantity=quantity,
+#                         unit_value=unit.cost_price or 0,
+#                         status=1
+#                     )
+#                     cont_txn.calculate_total_value()
+#                     db.session.add(cont_txn)
+#                     container_id = container.id
+
+#                 bottle_unit = ProductUnit.query.filter_by(product_id=product_id, conversion_quantity=1).first()
+#                 bottle_txn = BottleTransaction(
+#                     container_id=container_id,
+#                     product_unit_id=unit.id,
+#                     sale_id=sale.id,
+#                     transaction_type='Issued',
+#                     quantity=consumption_qty,
+#                     unit_value=bottle_unit.cost_price if bottle_unit else 0,
+#                     status=1
+#                 )
+#                 bottle_txn.calculate_total_value()
+#                 db.session.add(bottle_txn)
+
+#             # --- Inventory transaction ---
+#             db.session.add(InventoryTransaction(
+#                 transaction_no=txn_id,
+#                 product_id=product.id,
+#                 purchase_order_id=None,
+#                 quantity=consumption_qty,
+#                 unit_price=unit_price,
+#                 total_price=total_price,
+#                 transaction_type='Sale',
+#                 status=1
+#             ))
+
+#             # Reduce stock
+#             product.quantity -= consumption_qty
+#             db.session.add(product)
+
+#             # COGS
+#             latest_purchase = (PurchaseOrderItem.query
+#                                .filter(PurchaseOrderItem.product_id == product.id,
+#                                        PurchaseOrderItem.unit_id == unit_id)
+#                                .order_by(PurchaseOrderItem.created_at.desc())
+#                                .first())
+#             purchase_price = latest_purchase.unit_price if latest_purchase else 0.0
+#             cogs_total += purchase_price * consumption_qty
+#             total_amount += total_price
+
+#             # --- SaleItem ---
+#             sale_item = SaleItem(
+#                 sale_id=sale.id,
+#                 product_id=product.id,
+#                 product_name=product.name,
+#                 quantity=quantity,
+#                 unit_price=unit_price,
+#                 total_price=total_price,
+#                 unit_id=unit_id,
+#                 status=1
+#             )
+#             db.session.add(sale_item)
+
+#         # --- Final Sale calculations ---
+#         sale.total_amount = total_amount
+#         balance = total_amount - amount_paid
+
+#         if amount_paid == 0:
+#             sale.status = 3  # Credit
+#         elif 0 < balance <= 100:
+#             sale.status = 1
+#             balance = 0
+#         elif 0 < amount_paid < total_amount and balance > 100:
+#             sale.status = 4  # Partial
+#         else:
+#             sale.status = 1  # Paid
+
+#         sale.balance = round(balance, 2)
+#         db.session.flush()
+
+#         # --- Ledger posting ---
+#         credit_account_code = 1100
+#         if payment_account_id:
+#             payment_account = Account.query.get(payment_account_id)
+#             if not payment_account:
+#                 return jsonify({"error": "Invalid payment account"}), 400
+#             credit_account_code = payment_account.code
+
+#         entries = []
+#         if amount_paid > 0:
+#             if amount_paid >= total_amount:
+#                 entries = [
+#                     {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
+#                     {"account_id": 4010, "transaction_type": "Credit", "amount": amount_paid},
+#                     {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
+#                     {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+#                 ]
+#             else:
+#                 entries = [
+#                     {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
+#                     {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount - amount_paid},
+#                     {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
+#                     {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
+#                     {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+#                 ]
+#         else:
+#             entries = [
+#                 {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount},
+#                 {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
+#                 {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
+#                 {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+#             ]
+
+#         gl_entries = post_to_ledger(entries, transaction_no_id=txn_id,
+#                                     description=f"Sale #{sale.id}", transaction_date=sale_date)
+#         sale.transaction_no = txn_id
+
+#         # --- Payment ---
+#         if amount_paid > 0:
+#             payment = Payment(
+#                 sale_id=sale.id,
+#                 amount=amount_paid,
+#                 payment_type=payment_type,
+#                 reference=data.get("memo", txn_str),
+#                 payment_date=sale_date,
+#                 payment_account_id=payment_account_id,
+#                 status=1,
+#                 transaction_no=txn_id
+#             )
+#             db.session.add(payment)
+
+#         db.session.commit()
+
+#         return jsonify({
+#             "message": f"Sale {'updated' if sale_id else 'created'} successfully",
+#             "sale_id": sale.id,
+#             "total_amount": sale.total_amount,
+#             "total_paid": sale.total_paid,
+#             "balance": sale.balance,
+#             "payment_status": sale.status,
+#             "transaction_no": txn_str,
+#             "sale_date": sale.sale_date.strftime("%Y-%m-%d")
+#         }), 201
+
+#     except Exception as e:
+#         db.session.rollback()
+#         return jsonify({"error": str(e)}), 500
+
+
+# ------------------ Get All Sales ------------------ #
 @token_required
-@sales_bp.route('/edit', methods=['PUT'])
+@sales_bp.route('/', methods=['GET'])
+def get_sales():
+    """
+    Retrieve all active sales with their customer details and sale items.
+    """
+    try:
+        sales = (
+            Sale.query
+            .filter(Sale.status.in_([1, 2, 3, 4]))
+            .order_by(Sale.id.desc())
+            .all()
+        )
+
+        data = []
+        for s in sales:
+            # --- Get customer info ---
+            customer = s.customer  # assuming relationship Sale -> Customer exists
+            customer_data = {
+                "id": customer.id if customer else None,
+                "name": customer.name if customer else "Unknown",
+                "mobile": getattr(customer, "mobile", None),
+                "email": getattr(customer, "email", None),
+                "address": getattr(customer, "address", None),
+            }
+
+            # --- Get sale items ---
+            sale_items = SaleItem.query.filter_by(sale_id=s.id, status=1).all()
+            items = [
+                {
+                    "product_id": i.product_id,
+                    "product_name": i.product_name,
+                    "quantity": i.quantity,
+                    "unit_price": i.unit_price,
+                    "total_price": i.total_price,
+                }
+                for i in sale_items
+            ]
+
+            # --- Append final record ---
+            data.append({
+                "sale_id": s.id,
+                "sale_number": s.sale_number,
+                "total_amount": s.total_amount,
+                "payment_status": s.payment_status,
+                "sale_date": s.sale_date,
+                "created_at": s.created_at,
+                "updated_at": s.updated_at,
+                "balance": s.balance,
+                "total_paid": s.total_paid,
+                "customer": customer_data,
+                "items": items,
+            })
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# ------------------ Get Sale for Edit Form (with Category) ------------------ #
+# ------------------ Get Sale for Edit (Full Details) ------------------ #
+@token_required
+@sales_bp.route('/<int:sale_id>/edit', methods=['GET'])
+def get_sale_for_edit(sale_id):
+    """
+    Returns full sale data for editing, including:
+    - Sale header (customer, payment info, totals)
+    - Customer details
+    - Sale items (with category, unit, stock, prices)
+    - Payment summary
+    """
+
+    # --- 1️⃣ Fetch Sale ---
+    sale = Sale.query.get_or_404(sale_id)
+
+    # --- 2️⃣ Fetch Related Customer ---
+    customer = sale.customer.to_dict() if sale.customer else {
+        "id": 1,
+        "name": "Walk-in",
+        "phone": "",
+        "email": "",
+        "address": ""
+    }
+
+    # --- 3️⃣ Fetch Sale Items ---
+    sale_items = SaleItem.query.filter_by(sale_id=sale.id, status=1).all()
+    items = []
+    for i in sale_items:
+        product = i.product
+        category = None
+        if product and product.category_id:
+            category = Category.query.get(product.category_id)
+
+        # Get all product units
+        units = [{
+            "id": u.id,
+            "unit_name": u.unit_name,
+            "conversion_quantity": u.conversion_quantity,
+            "retail_price": u.retail_price,
+            "wholesale_price": u.wholesale_price,
+            "cost_price": u.cost_price,
+            "is_returnable": u.is_returnable
+        } for u in product.units] if product else []
+
+        # Get the active unit for this sale item
+        unit = next((u for u in product.units if u.id == i.unit_id), None) if product else None
+
+        items.append({
+            "id": i.id,
+            "product_id": i.product_id,
+            "product_name": i.product_name or (product.name if product else ""),
+            "category_id": product.category_id if product else None,
+            "category_name": category.name if category else "",
+            "quantity": i.quantity,
+            "unit_price": i.unit_price,
+            "total_price": i.total_price,
+            "unit_id": i.unit_id,
+            "unit_name": unit.unit_name if unit else "",
+            "stock_qty": product.quantity if product else 0,
+            "retail_price": unit.retail_price if unit else (product.price if product else 0),
+            "wholesale_price": unit.wholesale_price if unit else (product.whole_price if product else 0),
+            "units": units  # all available units
+        })
+
+    # --- 4️⃣ Fetch Payments ---
+    payments = Payment.query.filter_by(sale_id=sale.id, status=1).all()
+    total_paid = sum(p.amount for p in payments if p.amount)
+    payment_list = [{
+        "id": p.id,
+        "amount": p.amount,
+        "payment_date": p.payment_date.strftime("%Y-%m-%d") if p.payment_date else None,
+        "reference": p.reference,
+        "payment_type": p.payment_type
+    } for p in payments]
+
+    # --- 5️⃣ Build Response ---
+    data = {
+        "sale_id": sale.id,
+        "sale_number": sale.sale_number,
+        "sale_date": sale.sale_date.strftime("%Y-%m-%d"),
+        "customer_id": sale.customer_id,
+        "customer_name": customer["name"],
+        "customer": customer,
+        "total_amount": sale.total_amount,
+        "total_paid": total_paid,
+        "balance": sale.balance,
+        "payment_status": sale.payment_status,
+        "memo": getattr(sale, "memo", ""),  # if you later add notes/memo
+        "payment_account_id": getattr(sale, "payment_account_id", None),
+        "items": items,
+        "payments": payment_list
+    }
+
+    return jsonify({
+        "status": "success",
+        "message": f"Sale #{sale.sale_number} loaded successfully",
+        "data": data
+    }), 200
+
+
+# ------------------ Get Single Sale ------------------ #
+@token_required
+@sales_bp.route('/<int:sale_id>', methods=['GET'])
+def get_sale(sale_id):
+    sale = Sale.query.get_or_404(sale_id)
+    sale_items = SaleItem.query.filter_by(sale_id=sale.id, status=1).all()
+
+    items = [{
+        "product_id": i.product_id,
+        "product_name": i.product_name,
+        "quantity": i.quantity,
+        "unit_price": i.unit_price,
+        "total_price": i.total_price
+    } for i in sale_items]
+
+    return jsonify({
+        "sale_id": sale.id,
+        "sale_number": sale.sale_number,
+        "total_amount": sale.total_amount,
+        "payment_status": sale.payment_status,
+        "sale_date": sale.sale_date,
+        "created_at": sale.created_at,
+        "updated_at": sale.updated_at,
+        "items": items
+    })
+
+
+# ------------------ Update Sale ------------------ #
+@token_required
+@sales_bp.route('/edit', methods=['POST'])
 def create_or_update_sale():
     data = request.json
 
@@ -596,170 +1012,82 @@ def create_or_update_sale():
         return jsonify({"error": str(e)}), 500
 
 
-# ------------------ Get All Sales ------------------ #
-@token_required
-@sales_bp.route('/', methods=['GET'])
-def get_sales():
-    """
-    Retrieve all active sales with their customer details and sale items.
-    """
-    try:
-        sales = (
-            Sale.query
-            .filter(Sale.status.in_([1, 2, 3, 4]))
-            .order_by(Sale.id.desc())
-            .all()
-        )
 
-        data = []
-        for s in sales:
-            # --- Get customer info ---
-            customer = s.customer  # assuming relationship Sale -> Customer exists
-            customer_data = {
-                "id": customer.id if customer else None,
-                "name": customer.name if customer else "Unknown",
-                "mobile": getattr(customer, "mobile", None),
-                "email": getattr(customer, "email", None),
-                "address": getattr(customer, "address", None),
-            }
+# @token_required
+# @sales_bp.route('/<int:sale_id>', methods=['PUT'])
+# def update_sale(sale_id):
+#     sale = Sale.query.get_or_404(sale_id)
+#     data = request.json
+#     new_items = data.get('items')
 
-            # --- Get sale items ---
-            sale_items = SaleItem.query.filter_by(sale_id=s.id, status=1).all()
-            items = [
-                {
-                    "product_id": i.product_id,
-                    "product_name": i.product_name,
-                    "quantity": i.quantity,
-                    "unit_price": i.unit_price,
-                    "total_price": i.total_price,
-                }
-                for i in sale_items
-            ]
+#     # Reverse old GL entries
+#     if sale.transaction_no:
+#         original_entries = GeneralLedger.query.filter_by(transaction_no=sale.transaction_no).all()
+#         for entry in original_entries:
+#             reverse_type = 'Credit' if entry.transaction_type == 'Debit' else 'Debit'
+#             reverse_entry = GeneralLedger(
+#                 account_id=entry.account_id,
+#                 transaction_type=reverse_type,
+#                 amount=entry.amount,
+#                 description=f"Reversal of {entry.description} before update",
+#                 transaction_date=datetime.utcnow(),
+#                 transaction_no=entry.transaction_no
+#             )
+#             db.session.add(reverse_entry)
 
-            # --- Append final record ---
-            data.append({
-                "sale_id": s.id,
-                "sale_number": s.sale_number,
-                "total_amount": s.total_amount,
-                "payment_status": s.payment_status,
-                "sale_date": s.sale_date,
-                "created_at": s.created_at,
-                "updated_at": s.updated_at,
-                "balance": s.balance,
-                "total_paid": s.total_paid,
-                "customer": customer_data,
-                "items": items,
-            })
+#     # Update Sale main fields
+#     sale.sale_number = data.get('sale_number', sale.sale_number)
+#     sale.payment_status = data.get('payment_status', sale.payment_status)
+#     update_timestamps(sale)
 
-        return jsonify(data), 200
+#     # Update sale items
+#     if new_items:
+#         # Restore stock from old items
+#         for item in sale.saleitem_set:
+#             product = Product.query.get(item.product_id)
+#             if product:
+#                 product.quantity += item.quantity
+#                 db.session.add(product)
+#             db.session.delete(item)
 
-    except Exception as e:
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+#         # Add new items
+#         total_amount = 0
+#         for item in new_items:
+#             product = Product.query.get(item['product_id'])
+#             if not product:
+#                 return jsonify({"error": f"Product {item['product_id']} not found"}), 404
+#             if product.quantity < item['quantity']:
+#                 return jsonify({"error": f"Insufficient stock for {product.name}"}), 400
 
+#             product.quantity -= item['quantity']
+#             db.session.add(product)
 
-# ------------------ Get Single Sale ------------------ #
-@token_required
-@sales_bp.route('/<int:sale_id>', methods=['GET'])
-def get_sale(sale_id):
-    sale = Sale.query.get_or_404(sale_id)
-    sale_items = SaleItem.query.filter_by(sale_id=sale.id, status=1).all()
+#             sale_item = SaleItem(
+#                 sale_id=sale.id,
+#                 product_id=product.id,
+#                 product_name=product.name,
+#                 quantity=item['quantity'],
+#                 unit_price=product.price,
+#                 total_price=product.price * item['quantity'],
+#                 status=1
+#             )
+#             update_timestamps(sale_item)
+#             total_amount += sale_item.total_price
+#             db.session.add(sale_item)
 
-    items = [{
-        "product_id": i.product_id,
-        "product_name": i.product_name,
-        "quantity": i.quantity,
-        "unit_price": i.unit_price,
-        "total_price": i.total_price
-    } for i in sale_items]
+#         sale.total_amount = total_amount
 
-    return jsonify({
-        "sale_id": sale.id,
-        "sale_number": sale.sale_number,
-        "total_amount": sale.total_amount,
-        "payment_status": sale.payment_status,
-        "sale_date": sale.sale_date,
-        "created_at": sale.created_at,
-        "updated_at": sale.updated_at,
-        "items": items
-    })
+#         # Post new GL entries
+#         txn_id, txn_no_str = generate_transaction_number('SAL')
+#         entries = [
+#             {"account_id": 1, "transaction_type": "Debit", "amount": total_amount},   # Cash/Bank
+#             {"account_id": 2, "transaction_type": "Credit", "amount": total_amount}  # Sales Revenue
+#         ]
+#         gl_entries = post_to_ledger(entries, txn_id, description=f"Sale #{sale.id} updated")
+#         sale.transaction_no = txn_id
 
-
-# ------------------ Update Sale ------------------ #
-@token_required
-@sales_bp.route('/<int:sale_id>', methods=['PUT'])
-def update_sale(sale_id):
-    sale = Sale.query.get_or_404(sale_id)
-    data = request.json
-    new_items = data.get('items')
-
-    # Reverse old GL entries
-    if sale.transaction_no:
-        original_entries = GeneralLedger.query.filter_by(transaction_no=sale.transaction_no).all()
-        for entry in original_entries:
-            reverse_type = 'Credit' if entry.transaction_type == 'Debit' else 'Debit'
-            reverse_entry = GeneralLedger(
-                account_id=entry.account_id,
-                transaction_type=reverse_type,
-                amount=entry.amount,
-                description=f"Reversal of {entry.description} before update",
-                transaction_date=datetime.utcnow(),
-                transaction_no=entry.transaction_no
-            )
-            db.session.add(reverse_entry)
-
-    # Update Sale main fields
-    sale.sale_number = data.get('sale_number', sale.sale_number)
-    sale.payment_status = data.get('payment_status', sale.payment_status)
-    update_timestamps(sale)
-
-    # Update sale items
-    if new_items:
-        # Restore stock from old items
-        for item in sale.saleitem_set:
-            product = Product.query.get(item.product_id)
-            if product:
-                product.quantity += item.quantity
-                db.session.add(product)
-            db.session.delete(item)
-
-        # Add new items
-        total_amount = 0
-        for item in new_items:
-            product = Product.query.get(item['product_id'])
-            if not product:
-                return jsonify({"error": f"Product {item['product_id']} not found"}), 404
-            if product.quantity < item['quantity']:
-                return jsonify({"error": f"Insufficient stock for {product.name}"}), 400
-
-            product.quantity -= item['quantity']
-            db.session.add(product)
-
-            sale_item = SaleItem(
-                sale_id=sale.id,
-                product_id=product.id,
-                product_name=product.name,
-                quantity=item['quantity'],
-                unit_price=product.price,
-                total_price=product.price * item['quantity'],
-                status=1
-            )
-            update_timestamps(sale_item)
-            total_amount += sale_item.total_price
-            db.session.add(sale_item)
-
-        sale.total_amount = total_amount
-
-        # Post new GL entries
-        txn_id, txn_no_str = generate_transaction_number('SAL')
-        entries = [
-            {"account_id": 1, "transaction_type": "Debit", "amount": total_amount},   # Cash/Bank
-            {"account_id": 2, "transaction_type": "Credit", "amount": total_amount}  # Sales Revenue
-        ]
-        gl_entries = post_to_ledger(entries, txn_id, description=f"Sale #{sale.id} updated")
-        sale.transaction_no = txn_id
-
-    db.session.commit()
-    return jsonify({"message": "Sale updated with GL entries", "sale_id": sale.id})
+#     db.session.commit()
+#     return jsonify({"message": "Sale updated with GL entries", "sale_id": sale.id})
 
 
 # ------------------ Soft Delete Sale (Status = 0) ------------------ #
