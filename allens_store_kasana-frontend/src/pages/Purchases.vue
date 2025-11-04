@@ -59,7 +59,7 @@
           <th class="p-2 border">Product</th>
           <th class="p-2 border">Unit</th>
           <th class="p-2 border">Stock</th>
-          <th class="p-2 border">Cost</th>
+          <th class="p-2 border">Buying price</th>
           <th class="p-2 border">Wholesale</th>
           <th class="p-2 border">Retail</th>
           <th class="p-2 border">Quantity</th>

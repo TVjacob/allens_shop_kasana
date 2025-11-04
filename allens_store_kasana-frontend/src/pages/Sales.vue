@@ -80,7 +80,7 @@
           <th class="p-2 border w-56">Unit</th>
           <th class="p-2 border">Retail</th>
           <th class="p-2 border">Wholesale</th>
-          <th class="p-2 border">Unit Price</th>
+          <th class="p-2 border">Selling Price</th>
           <th class="p-2 border">Cost Price </th>
 
           <th class="p-2 border">Quantity</th>
