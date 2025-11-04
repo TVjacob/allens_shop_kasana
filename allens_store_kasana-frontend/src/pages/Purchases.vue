@@ -1,23 +1,26 @@
 <template>
-  <div class="p-6 max-w-6xl mx-auto bg-white shadow-lg rounded-lg">
-    <h1 class="text-3xl font-bold mb-6 text-gray-800">Purchase Order Dashboard</h1>
+  <div class="w-full min-h-screen bg-gray-50 px-6 py-6">
+    <!-- Page Header -->
+    <h1 class="text-3xl font-bold mb-6 text-gray-800 text-center">Purchase Order Dashboard</h1>
 
-    <!-- -------- Header Section -------- -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
+    <!-- -------- Purchase Header -------- -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <!-- Supplier -->
-      <v-autocomplete
-        label="Supplier"
-        v-model="selectedSupplier"
-        :items="suppliers"
-        item-title="name"
-        :item-value="s => s"
-        density="comfortable"
-        clearable
-        variant="outlined"
-        :loading="loadingSuppliers"
-        @update:model-value="selectSupplier"
-      ></v-autocomplete>
-      <p v-if="errors.supplier" class="text-red-500 text-sm col-span-2">{{ errors.supplier }}</p>
+      <div class="md:col-span-2">
+        <label class="block font-semibold mb-1">Supplier</label>
+        <v-autocomplete
+          v-model="selectedSupplier"
+          :items="suppliers"
+          item-title="name"
+          :item-value="s => s"
+          variant="outlined"
+          clearable
+          class="text-lg"
+          :loading="loadingSuppliers"
+          @update:model-value="selectSupplier"
+        ></v-autocomplete>
+        <p v-if="errors.supplier" class="text-red-600 text-sm mt-1">{{ errors.supplier }}</p>
+      </div>
 
       <!-- Invoice -->
       <div>
@@ -25,9 +28,10 @@
         <input
           v-model="poHeader.invoice_number"
           type="text"
-          class="w-full border border-gray-300 rounded-lg p-2"
+          placeholder="INV-001"
+          class="w-full border border-gray-300 rounded-xl p-3 text-lg focus:ring-2 focus:ring-indigo-400 transition"
         />
-        <p v-if="errors.invoice_number" class="text-red-500 text-sm">{{ errors.invoice_number }}</p>
+        <p v-if="errors.invoice_number" class="text-red-600 text-sm mt-1">{{ errors.invoice_number }}</p>
       </div>
 
       <!-- Purchase Date -->
@@ -36,189 +40,201 @@
         <input
           v-model="poHeader.purchase_date"
           type="date"
-          class="w-full border border-gray-300 rounded-lg p-2"
+          class="w-full border border-gray-300 rounded-xl p-3 text-lg focus:ring-2 focus:ring-indigo-400 transition"
         />
-        <p v-if="errors.purchase_date" class="text-red-500 text-sm">{{ errors.purchase_date }}</p>
+        <p v-if="errors.purchase_date" class="text-red-600 text-sm mt-1">{{ errors.purchase_date }}</p>
       </div>
 
       <!-- Memo -->
-      <div>
-        <label class="block font-semibold mb-1">Memo</label>
+      <div class="md:col-span-4">
+        <label class="block font-semibold mb-1">Memo / Notes</label>
         <input
           v-model="poHeader.memo"
           type="text"
-          class="w-full border border-gray-300 rounded-lg p-2"
+          placeholder="Optional"
+          class="w-full border border-gray-300 rounded-xl p-3 text-lg focus:ring-2 focus:ring-indigo-400 transition"
         />
       </div>
     </div>
 
-    <!-- -------- Items Table -------- -->
-    <table class="w-full border rounded-lg overflow-hidden relative">
-      <thead class="bg-gray-100 text-sm">
-        <tr>
-          <th class="p-2 border">Product</th>
-          <th class="p-2 border">Unit</th>
-          <th class="p-2 border">Stock</th>
-          <th class="p-2 border">Divide by Rate</th>
-          <th class="p-2 border">how Many</th>
-          <th class="p-2 border">Buying price</th>
-          <th class="p-2 border">Wholesale</th>
-          <th class="p-2 border">Retail</th>
-          <th class="p-2 border">Quantity</th>
-          <th class="p-2 border">Total</th>
-          <th class="p-2 border">Action</th>
-        </tr>
-      </thead>
+    <!-- -------- Purchase Items Table -------- -->
+    <div class="overflow-x-auto bg-white rounded-lg shadow border border-gray-200">
+      <table class="w-full table-auto border-collapse">
+        <thead class="bg-gray-100 text-base">
+          <tr>
+            <th class="p-3 border min-w-[220px]">Product</th>
+            <th class="p-3 border min-w-[140px] text-center">Unit</th>
+            <th class="p-3 border min-w-[100px] text-center">Stock</th>
+            <th class="p-3 border min-w-[120px] text-center">Rate</th>
+            <th class="p-3 border min-w-[120px] text-center">Divide by</th>
+            <th class="p-3 border min-w-[120px] text-center">Buying Price</th>
+            <th class="p-3 border min-w-[120px] text-center">Wholesale</th>
+            <th class="p-3 border min-w-[120px] text-center">Retail</th>
+            <th class="p-3 border min-w-[120px] text-center">Quantity</th>
+            <th class="p-3 border min-w-[120px] text-center">Total</th>
+            <th class="p-3 border min-w-[100px] text-center">Action</th>
+          </tr>
+        </thead>
 
-      <tbody>
-        <template v-for="(item, idx) in poItems" :key="idx">
-          <!-- Product Row -->
-          <tr class="relative hover:bg-gray-50 transition">
-            <!-- Product -->
-            <td class="p-2 border w-64">
-              <v-autocomplete
-                v-model="item.selectedProduct"
-                :items="item.searchResults"
-                item-title="name"
-                :item-value="p => p"
-                label="Search product..."
-                density="comfortable"
-                clearable
-                hide-details
-                :loading="item.loading"
-                @update:search="(val) => onProductSearch(val, idx)"
-                @update:model-value="(product) => onProductSelect(product, idx)"
-              ></v-autocomplete>
-              <p v-if="errors[`product_${idx}`]" class="text-red-500 text-xs">{{ errors[`product_${idx}`] }}</p>
-            </td>
-
-
-
-
-            <!-- Unit -->
-            <td class="p-2 border text-center text-base w-48">
-              <select
-                v-if="item.units?.length"
-                v-model="item.selectedUnitId"
-                @change="onUnitSelect(idx)"
-                class="border border-gray-300 rounded-lg p-1 w-full"
-              >
-                <option disabled value="">Select Unit</option>
-                <option
-                  v-for="u in item.units"
-                  :key="u.id"
-                  :value="u.id"
+        <tbody class="text-base">
+          <template v-for="(item, idx) in poItems" :key="idx">
+            <tr class="hover:bg-gray-50 transition">
+              <!-- Product -->
+              <td class="p-3 border min-w-[220px]">
+                <v-autocomplete
+                  v-model="item.selectedProduct"
+                  :items="item.searchResults"
+                  item-title="name"
+                  :item-value="p => p"
+                  label="Product"
+                  variant="outlined"
+                  clearable
+                  class="text-lg"
+                  hide-details
+                  :loading="item.loading"
+                  @update:search="val => onProductSearch(val, idx)"
+                  @update:model-value="product => onProductSelect(product, idx)"
+                ></v-autocomplete>
+                <span
+                  v-if="item.selectedProduct"
+                  class="block text-gray-800 mt-1 font-semibold text-lg"
                 >
-                  {{ u.unit_name }}
-                </option>
-              </select>
-            </td>
+                  Selected: {{ item.selectedProduct.name }}
+                </span>
+                <p v-if="errors[`product_${idx}`]" class="text-red-600 text-sm mt-1">
+                  {{ errors[`product_${idx}`] }}
+                </p>
+              </td>
 
-            <!-- Stock -->
-            <td class="p-2 border text-center">{{ item.stock_qty }}</td>
+              <!-- Unit -->
+              <td class="p-3 border text-center min-w-[140px]">
+                <v-autocomplete
+                  v-if="item.units && item.units.length"
+                  v-model="item.selectedUnitId"
+                  :items="item.units"
+                  item-title="unit_name"
+                  item-value="id"
+                  label="Unit"
+                  variant="outlined"
+                  hide-details
+                  class="text-base"
+                  @update:model-value="val => onUnitSelect(idx)"
+                ></v-autocomplete>
+              </td>
 
-                      <!-- Rate -->
-          <td class="p-2 border text-base w-48">
-            <input
-              type="number"
-              v-model.number="item.rate"
-              min="0"
-              placeholder="0"
-              @input="recalculateUnitPrice(item)"
-              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-            />
-          </td>
-          <!-- Quantity Divider -->
-          <td class="p-2 border text-base w-48">
-            <input
-              type="number"
-              v-model.number="item.quantity_number"
-              min="1"
-              placeholder="1"
-              @input="recalculateQuantityRate(item)"
-              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-            />
-          </td>
+              <!-- Stock -->
+              <td class="p-3 border text-center">{{ item.stock_qty }}</td>
 
+              <!-- Rate -->
+              <td class="p-3 border">
+                <input
+                  type="number"
+                  v-model.number="item.rate"
+                  min="0"
+                  placeholder="0"
+                  @input="recalculateUnitPrice(item)"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+                />
+              </td>
 
-            <!-- Editable Cost -->
-            <td class="p-2 border text-right text-base w-48">
-              <input
-                type="number"
-                min="0"
-                v-model.number="item.cost_price"
-                @input="calculateTotal(item)"
-                class="w-full text-right border border-gray-300 rounded-lg p-1"
-              />
-              <p v-if="errors[`cost_${idx}`]" class="text-red-500 text-xs">{{ errors[`cost_${idx}`] }}</p>
-            </td>
+              <!-- Divide By -->
+              <td class="p-3 border">
+                <input
+                  type="number"
+                  v-model.number="item.quantity_number"
+                  min="1"
+                  placeholder="1"
+                  @input="recalculateQuantityRate(item)"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+                />
+              </td>
 
-            <!-- Wholesale / Retail -->
-            <td class="p-2 border text-right">{{ formatPrice(item.wholesale_price) }}</td>
-            <td class="p-2 border text-right">{{ formatPrice(item.retail_price) }}</td>
+              <!-- Buying Price -->
+              <td class="p-3 border">
+                <input
+                  type="number"
+                  v-model.number="item.cost_price"
+                  min="0"
+                  @input="calculateTotal(item)"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+                />
+                <p v-if="errors[`cost_${idx}`]" class="text-red-600 text-sm mt-1">
+                  {{ errors[`cost_${idx}`] }}
+                </p>
+              </td>
 
-            <!-- Quantity -->
-            <td class="p-2 border text-base w-48">
-              <input
-                type="number"
-                min="0"
-                v-model.number="item.quantity"
-                @input="calculateTotal(item)"
-                class="w-full text-right border border-gray-300 rounded-lg p-2"
-              />
-              <p v-if="errors[`quantity_${idx}`]" class="text-red-500 text-xs">{{ errors[`quantity_${idx}`] }}</p>
-            </td>
+              <!-- Wholesale -->
+              <td class="p-3 border text-center">{{ formatPrice(item.wholesale_price) }}</td>
 
-            <!-- Total -->
-            <td class="p-2 border text-right font-semibold">{{ formatPrice(item.total_price) }}</td>
+              <!-- Retail -->
+              <td class="p-3 border text-center">{{ formatPrice(item.retail_price) }}</td>
 
-            <!-- Action -->
-            <td class="p-2 border text-center">
-              <button
-                @click="removeRow(idx)"
-                class="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
-              >
-                ✕
-              </button>
-            </td>
-          </tr>
+              <!-- Quantity -->
+              <td class="p-3 border">
+                <input
+                  type="number"
+                  v-model.number="item.quantity"
+                  min="0"
+                  @input="calculateTotal(item)"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+                />
+                <p v-if="errors[`quantity_${idx}`]" class="text-red-600 text-sm mt-1">
+                  {{ errors[`quantity_${idx}`] }}
+                </p>
+              </td>
 
-          <!-- Container Row -->
-          <tr v-if="item.container" class="bg-gray-50 text-sm text-gray-700">
-            <td colspan="9" class="p-2 border-l-4 border-indigo-400">
-              <div class="flex justify-between items-center">
-                <div>
-                  🧃 Container:
-                  <strong>{{ item.container.name }}</strong>
-                  <span class="text-gray-500 ml-1">(Value: {{ formatPrice(item.container.unit_value) }})</span>
+              <!-- Total -->
+              <td class="p-3 border text-right font-bold text-indigo-700">
+                {{ formatPrice(item.total_price) }}
+              </td>
+
+              <!-- Action -->
+              <td class="p-3 border text-center">
+                <button
+                  @click="removeRow(idx)"
+                  class="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition transform hover:scale-105"
+                >
+                  ✕
+                </button>
+              </td>
+            </tr>
+
+            <!-- Container Row -->
+            <tr v-if="item.container" class="bg-gray-50 text-sm text-gray-700">
+              <td colspan="11" class="p-2 border-l-4 border-indigo-400">
+                <div class="flex justify-between items-center">
+                  <div>
+                    🧃 Container:
+                    <strong>{{ item.container?.name || 'N/A' }}</strong>
+                    <span class="text-gray-500 ml-1">(Value: {{ formatPrice(item.container?.unit_value || 0) }})</span>
+                  </div>
+                  <span class="italic text-indigo-600">Returnable</span>
                 </div>
-                <span class="italic text-indigo-600">Returnable</span>
-              </div>
-            </td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
 
-    <!-- Totals -->
-    <div class="flex justify-between items-center mt-6">
+    <!-- -------- Add Row & Grand Total -------- -->
+    <div class="flex flex-col md:flex-row justify-between items-center mt-6 gap-4">
       <button
         @click="addRow"
-        class="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
+        class="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition transform hover:scale-105"
       >
         + Add Product
       </button>
-
-      <div class="text-xl font-bold">
+      <div class="text-2xl font-bold">
         Grand Total: <span class="text-indigo-600">{{ formatPrice(grandTotal) }}</span>
       </div>
     </div>
 
-    <!-- Save -->
+    <!-- -------- Save Button -------- -->
     <div class="mt-6 text-right">
       <button
         @click="savePurchaseOrder"
-        class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+        class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition transform hover:scale-105 text-lg"
       >
         Save Purchase Order
       </button>

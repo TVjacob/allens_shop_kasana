@@ -75,7 +75,7 @@ def generate_transaction_number(prefix, transaction_date=None, status=1):
     if transaction_date is None:
         transaction_date = datetime.utcnow()
 
-    tn = TransactionNumber.query.filter_by(prefix=prefix).first()
+    # tn = TransactionNumber.query.filter_by(prefix=prefix).first()
 
     # if not tn:
     tn = TransactionNumber(
@@ -90,7 +90,7 @@ def generate_transaction_number(prefix, transaction_date=None, status=1):
     #     tn.last_number += 1
     #     db.session.flush()
 
-    txn_str = f"{prefix}-{str(tn.last_number).zfill(5)}"
+    txn_str = f"{prefix}-{str(tn.id).zfill(5)}"
 
     db.session.commit()  # <-- Final commit
     return tn.id, txn_str
@@ -100,7 +100,7 @@ def generate_transaction_number_partone(prefix, transaction_date=None, status=1)
     if transaction_date is None:
         transaction_date = datetime.utcnow()
 
-    tn = TransactionNumber.query.filter_by(prefix=prefix).first()
+    # tn = TransactionNumber.query.filter_by(prefix=prefix).first()
 
     # if not tn:
     tn = TransactionNumber(
@@ -115,7 +115,7 @@ def generate_transaction_number_partone(prefix, transaction_date=None, status=1)
     #     tn.last_number += 1
     #     db.session.flush()
 
-    txn_str = f"{prefix}-{str(tn.last_number).zfill(5)}"
+    txn_str = f"{prefix}-{str(tn.id).zfill(5)}"
 
     db.session.commit()  # <-- Final commit
     return tn.id, txn_str
