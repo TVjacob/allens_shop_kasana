@@ -1,6 +1,7 @@
 <template>
-  <div class="p-6 max-w-6xl mx-auto bg-white shadow-lg rounded-lg">
-    <h1 class="text-3xl font-bold mb-6 text-gray-800">Sales Dashboard</h1>
+  <div class="w-full min-h-screen bg-gray-50 px-6 py-6">
+    <!-- Page Header -->
+    <h1 class="text-3xl font-bold mb-6 text-gray-800 text-center">Sales Dashboard</h1>
 
     <!-- --------- Sale Header --------- -->
     <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
@@ -23,7 +24,6 @@
         item-value="id"
         label="Customer"
         variant="outlined"
-        density="comfortable"
         clearable
         class="text-lg"
         :loading="loadingCustomers"
@@ -62,7 +62,6 @@
         item-value="id"
         label="Payment Account"
         variant="outlined"
-        density="comfortable"
         clearable
         class="text-lg"
         :loading="loadingAccounts"
@@ -72,162 +71,139 @@
     </div>
 
     <!-- --------- Sale Items Table --------- -->
-    <table class="w-full border rounded-lg overflow-hidden relative shadow-sm">
-      <thead class="bg-gray-100">
-        <tr>
-          <th class="p-2 border">Product</th>
-          <th class="p-2 border">Stock</th>
-          <th class="p-2 border w-56">Unit</th>
-          <th class="p-2 border">Retail</th>
-          <th class="p-2 border">Wholesale</th>
-          <th class="p-2 border">Divide by Rate</th>
-          <th class="p-2 border">how Many</th>
-          <th class="p-2 border">Selling Price</th>
-          <th class="p-2 border">Cost Price </th>
+    <div class="overflow-x-auto bg-white rounded-lg shadow border border-gray-200">
+      <table class="w-full table-auto border-collapse">
+        <thead class="bg-gray-100 text-base">
+          <tr>
+            <th class="p-3 border min-w-[220px]">Product</th>
+            <th class="p-3 border min-w-[80px] text-center">Stock</th>
+            <th class="p-3 border min-w-[140px]">Unit</th>
+            <th class="p-3 border min-w-[100px] text-center">Retail</th>
+            <th class="p-3 border min-w-[100px] text-center">Wholesale</th>
+            <th class="p-3 border min-w-[120px] text-center">Divide by Rate</th>
+            <th class="p-3 border min-w-[120px] text-center">How Many</th>
+            <th class="p-3 border min-w-[120px] text-center">Selling Price</th>
+            <th class="p-3 border min-w-[120px] text-center">Cost Price</th>
+            <th class="p-3 border min-w-[120px] text-center">Quantity</th>
+            <th class="p-3 border min-w-[120px] text-center">Total</th>
+            <th class="p-3 border min-w-[100px] text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="text-base">
+          <tr v-for="(item, idx) in saleItems" :key="idx" class="hover:bg-gray-50 transition">
+            <!-- Product -->
+            <td class="p-3 border min-w-[220px]">
+              <v-autocomplete
+                v-model="item.selectedProductObj"
+                :items="item.searchResults"
+                item-title="name"
+                item-value="id"
+                label="Product"
+                variant="outlined"
+                dense="false"
+                clearable
+                class="w-full text-lg"
+                hide-details
+                :loading="item.loading"
+                @update:search="val => debouncedSearchProduct(val, idx)"
+                @update:model-value="id => selectProduct(id, idx)"
+              ></v-autocomplete>
+              <span v-if="item.selectedProductObj" class="block text-gray-800 mt-1 font-semibold text-lg">
+                Selected: {{ item.selectedProductObj.name }}
+              </span>
+            </td>
 
-          <th class="p-2 border">Quantity</th>
+            <!-- Stock -->
+            <td class="p-3 border text-center">{{ item.stock_qty }}</td>
 
-          <th class="p-2 border">Total</th>
-          <th class="p-2 border">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="(item, idx) in saleItems"
-          :key="idx"
-          class="hover:bg-gray-50 transition"
-        >
-          <!-- Product -->
-          <td class="p-2 border w-64">
-            <v-autocomplete
-              v-model="item.selectedProductObj"
-              :items="item.searchResults"
-              item-title="name"
-              item-value="id"
-              label="Product"
-              variant="outlined"
-              density="comfortable"
-              clearable
-              hide-details
-              class="text-base"
-              :loading="item.loading"
-              @update:search="val => debouncedSearchProduct(val, idx)"
-              @update:model-value="id => selectProduct(id, idx)"
-            ></v-autocomplete>
-            <p v-if="saleItemsErrors[idx]?.product_id" class="text-red-600 text-sm mt-1">
-              {{ saleItemsErrors[idx].product_id }}
-            </p>
-          </td>
+            <!-- Unit -->
+            <td class="p-3 border min-w-[140px]">
+              <v-autocomplete
+                v-if="item.units && item.units.length"
+                v-model="item.selectedUnitObj"
+                :items="item.units"
+                item-title="unit_name"
+                item-value="id"
+                label="Select Unit"
+                variant="outlined"
+                hide-details
+                class="text-base w-full"
+                @update:model-value="val => selectUnit(val, idx)"
+              ></v-autocomplete>
+              <p v-if="saleItemsErrors[idx]?.unit_id" class="text-red-600 text-sm mt-1">
+                {{ saleItemsErrors[idx].unit_id }}
+              </p>
+            </td>
 
-          <!-- Stock Qty -->
-          <td class="p-2 border text-center text-base">{{ item.stock_qty }}</td>
+            <!-- Prices & Quantity -->
+            <td class="p-3 border text-center">{{ formatPrice(item.retail_price) }}</td>
+            <td class="p-3 border text-center">{{ formatPrice(item.wholesale_price) }}</td>
 
-          <!-- Unit -->
-          <td class="p-2 border">
-            <v-autocomplete
-              v-if="item.units && item.units.length"
-              v-model="item.selectedUnitObj"
-              :items="item.units"
-              item-title="unit_name"
-              item-value="id"
-              label="Select Unit"
-              variant="outlined"
-              density="comfortable"
-              hide-details
-              class="text-base min-w-[10rem]"
-              @update:model-value="val => selectUnit(val, idx)"
-            ></v-autocomplete>
-            <p v-if="saleItemsErrors[idx]?.unit_id" class="text-red-600 text-sm mt-1">
-              {{ saleItemsErrors[idx].unit_id }}
-            </p>
-          </td>
+            <td class="p-3 border">
+              <input
+                type="number"
+                v-model.number="item.rate"
+                min="0"
+                placeholder="0"
+                @input="recalculateUnitPrice(item)"
+                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+              />
+            </td>
 
-          <!-- Retail -->
-          <td class="p-2 border text-center text-gray-700 font-semibold">
-            {{ formatPrice(item.retail_price) }}
-          </td>
+            <td class="p-3 border">
+              <input
+                type="number"
+                v-model.number="item.quantity_number"
+                min="1"
+                placeholder="1"
+                @input="recalculateQuantityRate(item)"
+                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+              />
+            </td>
 
-          <!-- Wholesale -->
-          <td class="p-2 border text-center text-gray-700 font-semibold">
-            {{ formatPrice(item.wholesale_price) }}
-          </td>
-          
-          <!-- Rate -->
-          <td class="p-2 border text-base w-48">
-            <input
-              type="number"
-              v-model.number="item.rate"
-              min="0"
-              placeholder="0"
-              @input="recalculateUnitPrice(item)"
-              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-            />
-          </td>
-          <!-- Quantity Divider -->
-          <td class="p-2 border text-base w-48">
-            <input
-              type="number"
-              v-model.number="item.quantity_number"
-              min="1"
-              placeholder="1"
-              @input="recalculateQuantityRate(item)"
-              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-            />
-          </td>
+            <td class="p-3 border">
+              <input
+                type="number"
+                v-model.number="item.unit_price"
+                @input="calculateTotal(item)"
+                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+              />
+              <p v-if="saleItemsErrors[idx]?.unit_price" class="text-red-600 text-sm mt-1">
+                {{ saleItemsErrors[idx].unit_price }}
+              </p>
+            </td>
 
+            <td class="p-3 border text-center">{{ formatPrice(item.last_purchase_price) }}</td>
 
-          <!-- Unit Price -->
-          <td class="p-2 border text-right text-base w-48">
-          <input
-            type="number"
-            v-model.number="item.unit_price"
-            @input="calculateTotal(item)"
-            class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-          />
-            <p v-if="saleItemsErrors[idx]?.unit_price" class="text-red-600 text-sm mt-1">
-              {{ saleItemsErrors[idx].unit_price }}
-            </p>
-          </td>
+            <td class="p-3 border">
+              <input
+                type="number"
+                v-model.number="item.quantity"
+                @input="validateQuantity(item, idx)"
+                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+              />
+              <p v-if="saleItemsErrors[idx]?.quantity" class="text-red-600 text-sm mt-1">
+                {{ saleItemsErrors[idx].quantity }}
+              </p>
+            </td>
 
-          <!-- cost Price  -->
-          <td class="p-2 border text-center text-gray-700 font-semibold">
-            {{ formatPrice(item.last_purchase_price) }}
-          </td>
-          <!-- Quantity -->
-          <td class="p-2 border text-base w-48">
-            <input
-              type="number"
-              v-model.number="item.quantity"
-              @input="validateQuantity(item, idx)"
-              class="w-full text-right border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-            />
-            <p v-if="saleItemsErrors[idx]?.quantity" class="text-red-600 text-sm mt-1">
-              {{ saleItemsErrors[idx].quantity }}
-            </p>
-          </td>
+            <td class="p-3 border text-right font-bold text-indigo-700">{{ formatPrice(item.total_price) }}</td>
 
-
-
-          <!-- Total -->
-          <td class="p-2 border text-right font-bold text-indigo-700">
-            {{ formatPrice(item.total_price) }}
-          </td>
-
-          <!-- Actions -->
-          <td class="p-2 border text-center">
-            <button
-              @click="removeRow(idx)"
-              class="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition transform hover:scale-105"
-            >
-              ✕
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            <td class="p-3 border text-center">
+              <button
+                @click="removeRow(idx)"
+                class="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition transform hover:scale-105"
+              >
+                ✕
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- Add Item & Grand Total -->
-    <div class="flex justify-between items-center mt-6">
+    <div class="flex flex-col md:flex-row justify-between items-center mt-6 gap-4">
       <button
         @click="addRow"
         class="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition transform hover:scale-105"
@@ -235,8 +211,7 @@
         + Add Item
       </button>
       <div class="text-2xl font-bold">
-        Grand Total:
-        <span class="text-indigo-600">{{ formatPrice(grandTotal) }}</span>
+        Grand Total: <span class="text-indigo-600">{{ formatPrice(grandTotal) }}</span>
       </div>
     </div>
 
