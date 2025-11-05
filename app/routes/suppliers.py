@@ -102,24 +102,89 @@ def delete_supplier(id):
 
 # ------------------ Purchase Orders ------------------ #
 
-@token_required
-# Get all purchase orders
-@suppliers_bp.route('/orders', methods=['GET'])
+# @token_required
+# # Get all purchase orders
+# @suppliers_bp.route('/orders', methods=['GET'])
 
+# def get_purchase_orders():
+#     orders = PurchaseOrder.query.filter(PurchaseOrder.status.in_([1, 2, 3,5,4])).all()
+#     data = [{
+#         'id': o.id,
+#         'supplier_id': o.supplier_id,
+#         'supplier_name': o.supplier.name if o.supplier else None,
+#         'invoice_number': o.invoice_number,
+#         'total_amount': o.total_amount,
+#         'total_paid': o.total_paid,
+#         'total_balance': o.total_balance,
+#         'status': o.status,
+#         'created_at': o.created_at.strftime("%Y-%m-%d"),
+#         'purchase_date':o.purchase_date.strftime("%Y-%m-%d")
+#     } for o in orders]
+#     return jsonify(data), 200
+
+@token_required
+# Get all purchase orders with search & date filters
+@suppliers_bp.route('/orders', methods=['GET'])
 def get_purchase_orders():
-    orders = PurchaseOrder.query.filter(PurchaseOrder.status.in_([1, 2, 3,5,4])).all()
+    # Get query params
+    search = request.args.get('search', '').strip()
+    start_date = request.args.get('start_date', '').strip()
+    end_date = request.args.get('end_date', '').strip()
+
+    query = PurchaseOrder.query.join(Supplier).filter(PurchaseOrder.status.in_([1,2,3,4,5]))
+
+    # Search filter
+    if search:
+        search_pattern = f"%{search.lower()}%"
+        query = query.filter(
+            db.or_(
+                db.func.lower(Supplier.name).like(search_pattern),
+                db.func.lower(PurchaseOrder.invoice_number).like(search_pattern),
+                db.func.lower(PurchaseOrder.memo).like(search_pattern)
+            )
+        )
+
+    # Date filter
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            query = query.filter(PurchaseOrder.purchase_date >= start_dt)
+        except ValueError:
+            return jsonify({"error": "Invalid start_date format. Use YYYY-MM-DD."}), 400
+
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            query = query.filter(PurchaseOrder.purchase_date <= end_dt)
+        except ValueError:
+            return jsonify({"error": "Invalid end_date format. Use YYYY-MM-DD."}), 400
+
+    orders = query.all()
+
     data = [{
         'id': o.id,
         'supplier_id': o.supplier_id,
         'supplier_name': o.supplier.name if o.supplier else None,
         'invoice_number': o.invoice_number,
+        'memo': o.memo,
         'total_amount': o.total_amount,
         'total_paid': o.total_paid,
         'total_balance': o.total_balance,
         'status': o.status,
         'created_at': o.created_at.strftime("%Y-%m-%d"),
-        'purchase_date':o.purchase_date.strftime("%Y-%m-%d")
+        'purchase_date': o.purchase_date.strftime("%Y-%m-%d"),
+        'items': [
+            {
+                'id': item.id,
+                'product_id': item.product_id,
+                'product_name': item.product.name if item.product else None,
+                'quantity': item.quantity,
+                'unit_price': item.unit_price,
+                'total_price': item.total_price
+            } for item in o.items
+        ]
     } for o in orders]
+
     return jsonify(data), 200
 
 

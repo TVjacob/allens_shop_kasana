@@ -6,15 +6,49 @@
     <div class="flex space-x-4 mb-6">
       <button
         :class="currentTab === 'paid' ? activeTabClass : inactiveTabClass"
-        @click="currentTab = 'paid'"
+        @click="changeTab('paid')"
       >
         Paid Invoices
       </button>
       <button
         :class="currentTab === 'unpaid' ? activeTabClass : inactiveTabClass"
-        @click="currentTab = 'unpaid'"
+        @click="changeTab('unpaid')"
       >
         Unpaid Invoices
+      </button>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-4 mb-4 items-center">
+      <input
+  v-model="productSearchQuery"
+  @input="onProductSearch"
+  placeholder="🔍 Search product, supplier, invoice or memo"
+/>
+
+<!-- <input type="date" v-model="startDate" />
+<input type="date" v-model="endDate" /> -->
+
+
+      <input
+        type="date"
+        v-model="startDate"
+        @change="onFilterChange"
+        class="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+      />
+
+      <input
+        type="date"
+        v-model="endDate"
+        @change="onFilterChange"
+        class="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+      />
+
+      <button
+        @click="fetchPurchaseOrders"
+        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded shadow transition transform hover:scale-105"
+      >
+        Apply Filters
       </button>
     </div>
 
@@ -26,19 +60,6 @@
       <button @click="exportPDF" class="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded shadow transition transform hover:scale-105">
         Export PDF
       </button>
-    </div>
-
-    <!-- Product Search -->
-    <div class="mb-4 flex items-center gap-2">
-      <input
-        v-model="productSearchQuery"
-        @input="onProductSearch"
-        placeholder="🔍 Search product in current purchase items"
-        class="px-3 py-2 border rounded-lg w-64 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-      />
-      <span v-if="productSearchQuery" class="text-gray-500 text-sm">
-        Showing results for "{{ productSearchQuery }}"
-      </span>
     </div>
 
     <!-- Purchase Orders Table -->
@@ -105,6 +126,17 @@
             </td>
           </tr>
         </tbody>
+
+        <!-- Totals Row -->
+        <tfoot class="bg-gray-100 font-bold">
+          <tr>
+            <td colspan="4" class="p-3 text-right border-b">Totals:</td>
+            <td class="p-3 text-right border-b">{{ formatPrice(totalAmount) }}</td>
+            <td class="p-3 text-right border-b">{{ formatPrice(totalPaid) }}</td>
+            <td class="p-3 text-right border-b">{{ formatPrice(totalBalance) }}</td>
+            <td colspan="2" class="p-3 border-b"></td>
+          </tr>
+        </tfoot>
       </table>
     </div>
 
@@ -133,42 +165,62 @@ const selectedPO = ref(null);
 const activeTabClass = 'px-4 py-2 rounded bg-indigo-600 text-white transition transform hover:scale-105';
 const inactiveTabClass = 'px-4 py-2 rounded bg-gray-200 text-gray-700 transition transform hover:scale-105';
 
-// Product Search
-const productSearchQuery = ref('')
-const filteredSaleItems = computed(() => {
-  if (!productSearchQuery.value) return purchaseOrders.value
-  return purchaseOrders.value.filter(po =>
-    po.items?.some(item => item.product_name.toLowerCase().includes(productSearchQuery.value.toLowerCase()))
-  )
-})
-const onProductSearch = debounce(() => {}, 300);
+// Filters
+// Filters
+const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+// const startDate = ref(today);
+// const endDate = ref(today);
+const productSearchQuery = ref('');
+const startDate = ref(new Date().toISOString().split('T')[0]); // today
+const endDate = ref(new Date().toISOString().split('T')[0]);   // today
 
-// Fetch Data
+// Fetch Data with filters
+// const fetchPurchaseOrders = async () => {
+//   try {
+//     const params = {
+//       search: searchQuery.value || undefined,
+//       start_date: startDate.value || undefined,
+//       end_date: endDate.value || undefined,
+//     };
+//     const res = await api.get('/suppliers/orders', { params });
+//     purchaseOrders.value = res.data;
+//   } catch (err) {
+//     console.error(err);
+//   }
+// };
 const fetchPurchaseOrders = async () => {
-  try {
-    const res = await api.get('/suppliers/orders');
-    purchaseOrders.value = res.data;
-  } catch (err) {
-    console.error(err);
-  }
+  const res = await api.get('/suppliers/orders', {
+    params: {
+      search: productSearchQuery.value, // ✅ correct variable
+      start_date: startDate.value,
+      end_date: endDate.value
+    }
+  });
+  purchaseOrders.value = res.data;
 };
 
-const fetchAccounts = async () => {
-  try {
-    const res = await api.get('/accounts/cash-bank');
-    accounts.value = res.data;
-  } catch (err) {
-    console.error(err);
-  }
+// Tab change
+const changeTab = (tab) => {
+  currentTab.value = tab;
 };
 
-// Filtered by tab
+// Computed filtered by tab
 const filteredPurchaseOrders = computed(() => {
-  const orders = productSearchQuery.value ? filteredSaleItems.value : purchaseOrders.value;
   return currentTab.value === 'paid'
-    ? orders.filter(po => po.total_balance === 0)
-    : orders.filter(po => po.total_balance > 0);
+    ? purchaseOrders.value.filter(po => po.total_balance === 0)
+    : purchaseOrders.value.filter(po => po.total_balance > 0);
 });
+
+// Totals
+const totalAmount = computed(() =>
+  filteredPurchaseOrders.value.reduce((sum, po) => sum + Number(po.total_amount || 0), 0)
+);
+const totalPaid = computed(() =>
+  filteredPurchaseOrders.value.reduce((sum, po) => sum + Number(po.total_paid || 0), 0)
+);
+const totalBalance = computed(() =>
+  filteredPurchaseOrders.value.reduce((sum, po) => sum + Number(po.total_balance || 0), 0)
+);
 
 // Helpers
 const formatDate = dateStr => new Date(dateStr).toLocaleDateString();
@@ -184,10 +236,17 @@ const refreshPurchaseOrders = () => fetchPurchaseOrders();
 // Export placeholders
 const exportCSV = () => alert('CSV export not implemented yet!');
 const exportPDF = () => alert('PDF export not implemented yet!');
+const onProductSearch = debounce(() => {
+  fetchPurchaseOrders();
+}, 300);
+
+// Trigger API call when filters change (debounced)
+const onFilterChange = debounce(() => {
+  fetchPurchaseOrders();
+}, 500);
 
 onMounted(() => {
   fetchPurchaseOrders();
-  fetchAccounts();
 });
 </script>
 
