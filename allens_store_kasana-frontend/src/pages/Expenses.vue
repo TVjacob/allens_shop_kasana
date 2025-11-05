@@ -195,7 +195,10 @@ import "jspdf-autotable";
 
 export default {
   data() {
+    const today = new Date().toISOString().split("T")[0]// YYYY-MM-DD
+
     return {
+
       expenses: [],
       searchQuery: "",
       showModal: false,
@@ -207,7 +210,7 @@ export default {
         description: "",
         payment_account_name: "",
         payment_account_id: null,
-        expense_date: "",
+        expense_date: today,
         reference: "",
         items: [{ account_name: "", account_id: null, item_name: "", description: "", amount: 0 }],
       },
@@ -230,6 +233,7 @@ export default {
     },
   },
   methods: {
+    
     getAccountName(accountId) {
       const acc = this.expenseAccounts.find(a => a.id === accountId);
       return acc ? acc.name : "Unknown Account";
@@ -385,12 +389,14 @@ export default {
       this.showModal = false;
     },
     resetForm() {
+      const today = new Date().toISOString().split("T")[0]// YYYY-MM-DD
+
       this.expenseForm = {
         id: null,
         description: "",
         payment_account_name: "",
         payment_account_id: null,
-        expense_date: "",
+        expense_date: today,
         reference: "",
         items: [{ account_name: "", account_id: null, item_name: "", description: "", amount: 0 }],
       };

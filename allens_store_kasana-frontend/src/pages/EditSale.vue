@@ -387,7 +387,7 @@ const selectProduct = async (id, idx) => {
       item.selectedUnitObj = item.units[0]
       item.retail_price = item.units[0].retail_price ?? 0
       item.wholesale_price = item.units[0].wholesale_price ?? 0
-      item.unit_price = item.units[0].wholesale_price ?? 0
+      item.unit_price = item.units[0].retail_price ?? 0
       item.conversion_quantity = item.units[0].conversion_quantity ?? 1
     }
   } catch (err) {

@@ -125,29 +125,32 @@
               <!-- Stock -->
               <td class="p-3 border text-center">{{ item.stock_qty }}</td>
 
-              <!-- Rate -->
-              <td class="p-3 border">
+
+              <td class="p-3 border" v-if="Number(item.conversion_quantity) <= 1">
                 <input
                   type="number"
                   v-model.number="item.rate"
                   min="0"
                   placeholder="0"
                   @input="recalculateUnitPrice(item)"
-                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
                 />
               </td>
+              <td class="p-3 border" v-else></td>
 
-              <!-- Divide By -->
-              <td class="p-3 border">
+
+              <td class="p-3 border"  v-if="Number(item.conversion_quantity) <= 1">
                 <input
                   type="number"
                   v-model.number="item.quantity_number"
                   min="1"
                   placeholder="1"
                   @input="recalculateQuantityRate(item)"
-                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
                 />
               </td>
+              <td class="p-3 border" v-else></td>
+
 
               <!-- Buying Price -->
               <td class="p-3 border">
@@ -433,6 +436,7 @@ const onUnitSelect = (idx) => {
   item.is_returnable = unit.is_returnable ?? false
   item.container = unit.container || null
   item.rate =0 
+  item.conversion_quantity =unit.conversion_quantity
   calculateTotal(item)
 }
 const recalculateQuantityRate = (item) => {
@@ -467,7 +471,7 @@ const addRow = () => {
     searchResults: [],
     rate: 0, // 🔹 newly added
     quantity_number: 24, // ✅ newly added
-
+    conversion_quantity:1,
     loading: false,
     container: null,
   })
