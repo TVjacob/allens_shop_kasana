@@ -18,246 +18,246 @@ def update_timestamps(obj):
 def create_sale():
     data = request.json
 
-    # try:
-    items = data.get('items', [])
-    amount_paid = float(data.get('amount_paid', 0))
-    payment_account_id = data.get('payment_account_id')
-    sale_date_str = data.get("sale_date")
-    payment_type = data.get('payment_type', 'Cash')
-
-    # --- Validation: Items ---
-    if not items:
-        return jsonify({"error": "At least one item is required"}), 400
-
-    # --- Validation: Sale date ---
     try:
-        sale_date = datetime.strptime(sale_date_str, "%Y-%m-%d") if sale_date_str else datetime.utcnow()
-    except ValueError:
-        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+        items = data.get('items', [])
+        amount_paid = float(data.get('amount_paid', 0))
+        payment_account_id = data.get('payment_account_id')
+        sale_date_str = data.get("sale_date")
+        payment_type = data.get('payment_type', 'Cash')
 
-    # --- Initialize totals ---
-    total_amount = 0
-    cogs_total = 0
-    txn_id, txn_str = generate_transaction_number_partone('INV', transaction_date=sale_date)
+        # --- Validation: Items ---
+        if not items:
+            return jsonify({"error": "At least one item is required"}), 400
 
-    # --- Create Sale record ---
-    sale = Sale(
-        sale_number=txn_str,
-        customer_id=data.get("customer_id", 1),
-        total_paid=amount_paid,
-        status=1,
-        sale_date=sale_date
-    )
-    db.session.add(sale)
-    db.session.flush()
+        # --- Validation: Sale date ---
+        try:
+            sale_date = datetime.strptime(sale_date_str, "%Y-%m-%d") if sale_date_str else datetime.utcnow()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
 
-    # --- Process Sale Items ---
-    for idx, item_data in enumerate(items, start=1):
-        product_id = item_data.get("product_id")
-        unit_id = item_data.get("unit_id")
-        quantity = float(item_data.get("quantity", 0))
-        unit_price = float(item_data.get("unit_price", 0))
-        total_price = float(item_data.get("total_price", unit_price * quantity))
+        # --- Initialize totals ---
+        total_amount = 0
+        cogs_total = 0
+        txn_id, txn_str = generate_transaction_number_partone('INV', transaction_date=sale_date)
 
-        # --- Validation ---
-        if not product_id or not unit_id:
-            return jsonify({"error": f"Product ID and Unit ID are required for item #{idx}"}), 400
+        # --- Create Sale record ---
+        sale = Sale(
+            sale_number=txn_str,
+            customer_id=data.get("customer_id", 1),
+            total_paid=amount_paid,
+            status=1,
+            sale_date=sale_date
+        )
+        db.session.add(sale)
+        db.session.flush()
 
-        product = Product.query.get(product_id)
-        if not product:
-            return jsonify({"error": f"Product with ID {product_id} not found for item #{idx}"}), 404
+        # --- Process Sale Items ---
+        for idx, item_data in enumerate(items, start=1):
+            product_id = item_data.get("product_id")
+            unit_id = item_data.get("unit_id")
+            quantity = float(item_data.get("quantity", 0))
+            unit_price = float(item_data.get("unit_price", 0))
+            total_price = float(item_data.get("total_price", unit_price * quantity))
 
-        unit = ProductUnit.query.get(unit_id)
-        if not unit or unit.product_id != product.id:
-            return jsonify({"error": f"Invalid unit {unit_id} for product {product.name}"}), 400
+            # --- Validation ---
+            if not product_id or not unit_id:
+                return jsonify({"error": f"Product ID and Unit ID are required for item #{idx}"}), 400
 
-        # --- Compute consumption quantity ---
-        consumption_qty = quantity * unit.conversion_quantity
+            product = Product.query.get(product_id)
+            if not product:
+                return jsonify({"error": f"Product with ID {product_id} not found for item #{idx}"}), 404
 
-        # --- Check stock availability ---
-        if product.quantity < consumption_qty:
-            return jsonify({
-                "error": f"Insufficient stock for {product.name}. Required {consumption_qty}, available {product.quantity}"
-            }), 400
+            unit = ProductUnit.query.get(unit_id)
+            if not unit or unit.product_id != product.id:
+                return jsonify({"error": f"Invalid unit {unit_id} for product {product.name}"}), 400
 
-        # --- Returnable container handling ---
-        if unit.is_returnable:
-            container = ReturnableContainer.query.filter_by(product_unit_id=unit.id).first()
-            container_id = None
-            if container:
-                container.process_transaction('Issued', quantity)
-                db.session.add(container)
+            # --- Compute consumption quantity ---
+            consumption_qty = quantity * unit.conversion_quantity
 
-                cont_txn = ContainerTransaction(
-                    container_id=container.id,
+            # --- Check stock availability ---
+            if product.quantity < consumption_qty:
+                return jsonify({
+                    "error": f"Insufficient stock for {product.name}. Required {consumption_qty}, available {product.quantity}"
+                }), 400
+
+            # --- Returnable container handling ---
+            if unit.is_returnable:
+                container = ReturnableContainer.query.filter_by(product_unit_id=unit.id).first()
+                container_id = None
+                if container:
+                    container.process_transaction('Issued', quantity)
+                    db.session.add(container)
+
+                    cont_txn = ContainerTransaction(
+                        container_id=container.id,
+                        sale_id=sale.id,
+                        customer_id=sale.customer_id,
+                        transaction_type='Issued',
+                        quantity=quantity,
+                        unit_value=unit.cost_price or 0,
+                        status=1
+                    )
+                    cont_txn.calculate_total_value()
+                    db.session.add(cont_txn)
+                    container_id = container.id
+
+                product_unit_bottle = ProductUnit.query.filter_by(product_id=product_id, conversion_quantity=1).first()
+                bottle_txn = BottleTransaction(
+                    container_id=container_id,
+                    product_unit_id=unit.id,
                     sale_id=sale.id,
-                    customer_id=sale.customer_id,
                     transaction_type='Issued',
-                    quantity=quantity,
-                    unit_value=unit.cost_price or 0,
+                    quantity=consumption_qty,
+                    unit_value=product_unit_bottle.cost_price if product_unit_bottle else 0,
                     status=1
                 )
-                cont_txn.calculate_total_value()
-                db.session.add(cont_txn)
-                container_id = container.id
+                bottle_txn.calculate_total_value()
+                db.session.add(bottle_txn)
 
-            product_unit_bottle = ProductUnit.query.filter_by(product_id=product_id, conversion_quantity=1).first()
-            bottle_txn = BottleTransaction(
-                container_id=container_id,
-                product_unit_id=unit.id,
-                sale_id=sale.id,
-                transaction_type='Issued',
+            # --- Record inventory transaction ---
+            db.session.add(InventoryTransaction(
+                transaction_no=txn_id,
+                product_id=product.id,
+                purchase_order_id=None,
                 quantity=consumption_qty,
-                unit_value=product_unit_bottle.cost_price if product_unit_bottle else 0,
+                unit_price=unit_price,
+                total_price=total_price,
+                transaction_type='Sale',
+                status=1
+            ))
+
+            # --- Reduce stock ---
+            product.quantity -= consumption_qty
+            db.session.add(product)
+
+            # --- Get latest purchase price ---
+            # latest_purchase = (
+            #     PurchaseOrderItem.query
+            #     .filter(PurchaseOrderItem.product_id == product.id,PurchaseOrderItem.unit_id== unit_id)
+            #     .order_by(PurchaseOrderItem.created_at.desc())
+            #     .first()
+            # )
+            latest_purchase=get_latest_purchase_price(product.id,unit_id,sale_date)
+            # purchase_price = latest_purchase.unit_price if latest_purchase else 0.0
+            cogs_total += latest_purchase * consumption_qty
+            total_amount += total_price
+
+
+            # --- Create SaleItem ---
+            sale_item = SaleItem(
+                sale_id=sale.id,
+                product_id=product.id,
+                product_name=product.name,
+                quantity=quantity,
+                unit_price=unit_price,
+                total_price=total_price,
+                unit_id=unit_id,
                 status=1
             )
-            bottle_txn.calculate_total_value()
-            db.session.add(bottle_txn)
+            db.session.add(sale_item)
 
-        # --- Record inventory transaction ---
-        db.session.add(InventoryTransaction(
-            transaction_no=txn_id,
-            product_id=product.id,
-            purchase_order_id=None,
-            quantity=consumption_qty,
-            unit_price=unit_price,
-            total_price=total_price,
-            transaction_type='Sale',
-            status=1
-        ))
+        # # --- Final Sale calculations ---
+        # sale.total_amount = total_amount
+        # balance = total_amount - amount_paid
 
-        # --- Reduce stock ---
-        product.quantity -= consumption_qty
-        db.session.add(product)
+        # if amount_paid == 0:
+        #     sale.status = 3  # Credit
+        # elif 0 < amount_paid < round(total_amount) and balance >100:
+        #     sale.status = 4  # Partial
+        # else:
+        #     sale.status = 1  # Paid
+        
+        # --- Final Sale Calculations ---
+        sale.total_amount = total_amount
+        balance = total_amount - amount_paid
 
-        # --- Get latest purchase price ---
-        # latest_purchase = (
-        #     PurchaseOrderItem.query
-        #     .filter(PurchaseOrderItem.product_id == product.id,PurchaseOrderItem.unit_id== unit_id)
-        #     .order_by(PurchaseOrderItem.created_at.desc())
-        #     .first()
-        # )
-        latest_purchase=get_latest_purchase_price(product.id,unit_id,sale_date)
-        # purchase_price = latest_purchase.unit_price if latest_purchase else 0.0
-        cogs_total += latest_purchase * consumption_qty
-        total_amount += total_price
+        # 🔹 Status logic
+        if amount_paid == 0:
+            sale.status = 3  # Credit (nothing paid)
+        elif 0 < balance <= 100:
+            # If remaining balance is very small (≤100 UGX), treat as fully paid
+            sale.status = 1  # Paid
+            balance = 0      # Optional: clear tiny rounding difference
+        elif 0 < amount_paid < total_amount and balance > 100:
+            sale.status = 4  # Partial
+        else:
+            sale.status = 1  # Fully Paid
 
+        # 🔹 Update balance field
+        sale.balance = round(balance, 2)
 
-        # --- Create SaleItem ---
-        sale_item = SaleItem(
-            sale_id=sale.id,
-            product_id=product.id,
-            product_name=product.name,
-            quantity=quantity,
-            unit_price=unit_price,
-            total_price=total_price,
-            unit_id=unit_id,
-            status=1
-        )
-        db.session.add(sale_item)
+        
+        sale.balance = total_amount - amount_paid
 
-    # # --- Final Sale calculations ---
-    # sale.total_amount = total_amount
-    # balance = total_amount - amount_paid
+        db.session.flush()
 
-    # if amount_paid == 0:
-    #     sale.status = 3  # Credit
-    # elif 0 < amount_paid < round(total_amount) and balance >100:
-    #     sale.status = 4  # Partial
-    # else:
-    #     sale.status = 1  # Paid
-    
-    # --- Final Sale Calculations ---
-    sale.total_amount = total_amount
-    balance = total_amount - amount_paid
+        # --- Ledger Posting ---
+        credit_account_code = 1100  # default
+        if payment_account_id:
+            payment_account = Account.query.get(payment_account_id)
+            if not payment_account:
+                return jsonify({"error": "Invalid payment account"}), 400
+            credit_account_code = payment_account.code
 
-    # 🔹 Status logic
-    if amount_paid == 0:
-        sale.status = 3  # Credit (nothing paid)
-    elif 0 < balance <= 100:
-        # If remaining balance is very small (≤100 UGX), treat as fully paid
-        sale.status = 1  # Paid
-        balance = 0      # Optional: clear tiny rounding difference
-    elif 0 < amount_paid < total_amount and balance > 100:
-        sale.status = 4  # Partial
-    else:
-        sale.status = 1  # Fully Paid
-
-    # 🔹 Update balance field
-    sale.balance = round(balance, 2)
-
-    
-    sale.balance = total_amount - amount_paid
-
-    db.session.flush()
-
-    # --- Ledger Posting ---
-    credit_account_code = 1100  # default
-    if payment_account_id:
-        payment_account = Account.query.get(payment_account_id)
-        if not payment_account:
-            return jsonify({"error": "Invalid payment account"}), 400
-        credit_account_code = payment_account.code
-
-    entries = []
-    if amount_paid > 0:
-        if amount_paid >= total_amount:
-            entries = [
-                {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
-                {"account_id": 4010, "transaction_type": "Credit", "amount": amount_paid}, # sales revenus
-                {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},#cogs
-                {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},#inventory
-            ]
+        entries = []
+        if amount_paid > 0:
+            if amount_paid >= total_amount:
+                entries = [
+                    {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
+                    {"account_id": 4010, "transaction_type": "Credit", "amount": amount_paid}, # sales revenus
+                    {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},#cogs
+                    {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},#inventory
+                ]
+            else:
+                entries = [
+                    {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
+                    {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount - amount_paid},
+                    {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
+                    {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
+                    {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
+                ]
         else:
             entries = [
-                {"account_id": credit_account_code, "transaction_type": "Debit", "amount": amount_paid},
-                {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount - amount_paid},
+                {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount},
                 {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
                 {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
                 {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
             ]
-    else:
-        entries = [
-            {"account_id": 1100, "transaction_type": "Debit", "amount": total_amount},
-            {"account_id": 4010, "transaction_type": "Credit", "amount": total_amount},
-            {"account_id": 5010, "transaction_type": "Debit", "amount": cogs_total},
-            {"account_id": 1400, "transaction_type": "Credit", "amount": cogs_total},
-        ]
 
-    gl_entries = post_to_ledger(entries, transaction_no_id=txn_id,
-                                description=f"Sale #{sale.id}", transaction_date=sale_date)
-    sale.transaction_no = txn_id
+        gl_entries = post_to_ledger(entries, transaction_no_id=txn_id,
+                                    description=f"Sale #{sale.id}", transaction_date=sale_date)
+        sale.transaction_no = txn_id
 
-    # --- Payment Record ---
-    if amount_paid > 0:
-        payment = Payment(
-            sale_id=sale.id,
-            amount=amount_paid,
-            payment_type=payment_type,
-            reference=data.get("memo", txn_str),
-            payment_date=sale_date,
-            payment_account_id=payment_account_id,
-            status=1,
-            transaction_no=txn_id
-        )
-        db.session.add(payment)
+        # --- Payment Record ---
+        if amount_paid > 0:
+            payment = Payment(
+                sale_id=sale.id,
+                amount=amount_paid,
+                payment_type=payment_type,
+                reference=data.get("memo", txn_str),
+                payment_date=sale_date,
+                payment_account_id=payment_account_id,
+                status=1,
+                transaction_no=txn_id
+            )
+            db.session.add(payment)
 
-    db.session.commit()
+        db.session.commit()
 
-    return jsonify({
-        "message": "Sale created successfully",
-        "sale_id": sale.id,
-        "total_amount": sale.total_amount,
-        "total_paid": sale.total_paid,
-        "balance": sale.balance,
-        "payment_status": sale.status,
-        "transaction_no": txn_str,
-        "sale_date": sale.sale_date.strftime("%Y-%m-%d")
-    }), 201
+        return jsonify({
+            "message": "Sale created successfully",
+            "sale_id": sale.id,
+            "total_amount": sale.total_amount,
+            "total_paid": sale.total_paid,
+            "balance": sale.balance,
+            "payment_status": sale.status,
+            "transaction_no": txn_str,
+            "sale_date": sale.sale_date.strftime("%Y-%m-%d")
+        }), 201
 
-    # except Exception as e:
-    #     db.session.rollback()
-    #     return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 @token_required
 @sales_bp.route('/<int:sale_id>/delete', methods=['DELETE'])
