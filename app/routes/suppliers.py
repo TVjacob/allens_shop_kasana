@@ -12,7 +12,7 @@ from flask import Blueprint, request, jsonify
 # 2 = Partially Paid
 # 3 = Fully Paid
 from app import db
-from app.models import Account, Category, ContainerTransaction, InventoryTransaction, Product, ProductUnit, ReturnableContainer, Supplier, PurchaseOrder, PurchaseOrderItem, SupplierPayment
+from app.models import Account, Category, ContainerTransaction, GeneralLedger, InventoryTransaction, Product, ProductUnit, ReturnableContainer, Supplier, PurchaseOrder, PurchaseOrderItem, SupplierPayment
 from app.utils.auth import token_required
 from app.utils.gl_utils import post_to_ledger, generate_transaction_number
 from datetime import datetime
@@ -123,35 +123,105 @@ def get_purchase_orders():
     return jsonify(data), 200
 
 
-# @token_required
-# # Get purchase order by ID
-# @suppliers_bp.route('/orders/<int:id>', methods=['GET'])
+@token_required
+@suppliers_bp.route('/orders/full_details/<int:id>', methods=['GET'])
+def get_purchase_order_fill_details(id):
+    """
+    Return detailed Purchase Order data for editing on frontend.
+    Includes:
+    - Supplier info
+    - Product + category info
+    - Product units (with cost/wholesale/retail)
+    - Returnable container flags
+    """
 
-# def get_purchase_order(id):
-#     po = PurchaseOrder.query.get_or_404(id)
-#     return jsonify({
-#         'id': po.id,
-#         'supplier_id': po.supplier_id,
-#         'supplier_name': po.supplier.name if po.supplier else None,
-#         'invoice_number': po.invoice_number,
-#         'memo': po.memo,
-#         'purchase_date': po.purchase_date.strftime("%Y-%m-%d"),
-#         'total_amount': po.total_amount,
-#         'total_paid': po.total_paid,
-#         'total_balance': po.total_balance,
-#         'status': po.status,
-#         'items': [{
-#             'id': item.id,
-#             'product_id': item.product_id,
-#             'product_name': Product.query.get(item.product_id).name if item.product_id else None,
-#             'stock_quantity': Product.query.get(item.product_id).quantity if item.product_id else None,
-#             'unit': db.session.query(Category).filter_by(id=Product.query.get(item.product_id).category_id).first().name if item.product_id and Product.query.get(item.product_id) else None,
-#             'quantity': item.quantity,
-#             'unit_price': item.unit_price,
-#             'total_price': item.total_price,
-#             'status': item.status
-#         } for item in po.items]
-#     })
+    po = PurchaseOrder.query.get_or_404(id)
+
+    # --- Fetch supplier info ---
+    supplier = Supplier.query.get(po.supplier_id)
+
+    # --- Build item details ---
+    items_data = []
+    for item in po.items:
+        if item.status != 1:
+            continue
+
+        product = Product.query.get(item.product_id)
+        if not product:
+            continue
+
+        # Get category name
+        category_name = (
+            db.session.query(Category.name)
+            .filter_by(id=product.category_id, status=1)
+            .scalar()
+            if product.category_id else None
+        )
+
+        # Get all units for this product
+        product_units = ProductUnit.query.filter_by(product_id=product.id, status=1).all()
+        units_list = [
+            {
+                "id": u.id,
+                "unit_name": u.unit_name,
+                "conversion_quantity": u.conversion_quantity,
+                "cost_price": u.cost_price,
+                "wholesale_price": u.wholesale_price,
+                "retail_price": u.retail_price,
+                "is_returnable": u.is_returnable,
+                "unit_code": u.unit_code
+            } for u in product_units
+        ]
+
+        # Find current unit
+        unit = ProductUnit.query.get(item.unit_id) if item.unit_id else None
+
+        # Returnable info
+        container = None
+        if unit and unit.is_returnable:
+            container = (
+                ReturnableContainer.query.filter_by(product_unit_id=unit.id).first()
+            )
+            container = {
+                "id": container.id,
+                "total_in_stock": container.total_in_stock,
+                "unit_value": container.unit_value
+            } if container else None
+
+        items_data.append({
+            "id": item.id,
+            "product_id": item.product_id,
+            "product_name": product.name,
+            "category": category_name,
+            "stock_qty": product.quantity or 0,
+            "unit_id": item.unit_id,
+            "unit_name": unit.unit_name if unit else None,
+            "units": units_list,
+            "quantity": item.quantity,
+            "cost_price": item.unit_price,
+            "wholesale_price": unit.wholesale_price if unit else 0,
+            "retail_price": unit.retail_price if unit else 0,
+            "total_price": item.total_price,
+            "is_returnable": unit.is_returnable if unit else False,
+            "container": container,
+            "conversion_quantity": unit.conversion_quantity if unit else 1,
+            "status": item.status
+        })
+
+    return jsonify({
+        "id": po.id,
+        "supplier_id": po.supplier_id,
+        "supplier_name": supplier.name if supplier else None,
+        "invoice_number": po.invoice_number,
+        "memo": po.memo or "",
+        "purchase_date": po.purchase_date.strftime("%Y-%m-%d") if po.purchase_date else None,
+        "total_amount": po.total_amount,
+        "total_paid": po.total_paid,
+        "total_balance": po.total_balance,
+        "status": po.status,
+        "items": items_data
+    })
+
 
 @token_required
 @suppliers_bp.route('/orders/<int:id>', methods=['GET'])
@@ -326,49 +396,561 @@ def add_purchase_order():
 
 
 
+@token_required
+@suppliers_bp.route('/orders/<int:id>/soft-delete', methods=['DELETE'])
+def soft_delete_purchase_order(id):
+    """
+    Soft delete a purchase order, reverse product stock, container stock,
+    mark all PurchaseOrderItems as status=9, reverse inventory transactions,
+    mark payments as voided, and reverse GL entries for the PO and related payments.
+    """
+    try:
+        po = PurchaseOrder.query.get_or_404(id)
+
+        if po.status == 9:
+            return jsonify({'message': f'Purchase Order #{po.id} already deleted'}), 400
+
+        txn_id = po.transaction_no  # Original transaction number for reference
+
+        # -----------------------------
+        # STEP 1: Reverse stock and soft-delete PO items
+        # -----------------------------
+        for item in po.items:
+            if item.status == 9:
+                continue
+
+            # Reverse product stock
+            product = Product.query.get(item.product_id)
+            if product:
+                product_unit = ProductUnit.query.filter_by(id=item.unit_id).first()
+                quantity = item.quantity
+                if product_unit and product_unit.conversion_quantity:
+                    quantity *= product_unit.conversion_quantity
+                product.quantity = max((product.quantity or 0) - quantity, 0)
+                db.session.add(product)
+
+            # Reverse returnable container stock
+            if item.unit_id:
+                crate = ReturnableContainer.query.filter_by(product_unit_id=item.unit_id).first()
+                if crate:
+                    crate.total_in_stock = max((crate.total_in_stock or 0) - item.quantity, 0)
+                    db.session.add(crate)
+                    db.session.add(ContainerTransaction(
+                        container_id=crate.id,
+                        transaction_type='Removed',
+                        quantity=item.quantity,
+                        unit_value=crate.unit_value or 0,
+                        total_value=(crate.unit_value or 0) * item.quantity,
+                        purchase_order_id=po.id,
+                        status=9
+                    ))
+
+            # Soft delete the PurchaseOrderItem
+            item.status = 9
+            db.session.add(item)
+
+        # -----------------------------
+        # STEP 2: Reverse inventory transactions
+        # -----------------------------
+        inv_txns = InventoryTransaction.query.filter_by(transaction_no=txn_id, status=1).all()
+        for inv in inv_txns:
+            inv.status = 9
+            db.session.add(inv)
+
+        # -----------------------------
+        # STEP 3: Soft delete payments
+        # -----------------------------
+        payments = SupplierPayment.query.filter_by(purchase_order_id=po.id, status=1).all()
+        for payment in payments:
+            payment.status = 9
+            db.session.add(payment)
+
+        # -----------------------------
+        # STEP 4: Reverse GL entries
+        # -----------------------------
+        ledger_txns = GeneralLedger.query.filter(
+            ((GeneralLedger.description.ilike(f"%Credit for PO #{po.id}%")) |
+             (GeneralLedger.description.ilike(f"%Payment for PO #{po.id}%"))) &
+            (GeneralLedger.status == 1)
+        ).all()
+
+        for gl in ledger_txns:
+            # Mark original GL entry as deleted
+            # gl.status = 9
+            # db.session.add(gl)
+
+            # Create reversal GL entry (debit ↔ credit)
+            reversed_entry = GeneralLedger(
+                transaction_no=gl.transaction_no,
+                account_id=gl.account_id,
+                transaction_type="Debit" if gl.transaction_type == "Credit" else "Credit",
+                amount=gl.amount,
+                description=f"Reversal of {gl.description}",
+                transaction_date=datetime.utcnow(),
+                status=1
+            )
+            db.session.add(reversed_entry)
+
+        # -----------------------------
+        # STEP 5: Mark PurchaseOrder as deleted
+        # -----------------------------
+        po.status = 9
+        db.session.add(po)
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"Purchase Order #{po.id} and related items/payments soft-deleted successfully",
+            "items_deleted": len(po.items),
+            "payments_voided": len(payments),
+            "ledger_reversed": len(ledger_txns)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
-# Update purchase order details
+
+
 @token_required
 @suppliers_bp.route('/orders/<int:id>', methods=['PUT'])
 def update_purchase_order(id):
-    po = PurchaseOrder.query.get_or_404(id)
-    data = request.get_json()
+    """
+    Update an existing Purchase Order:
+    - update header
+    - sync items (add/update/remove)
+    - sync payments (add/update/remove) and post/reverse GL
+    - update inventory, returnable containers, inventory transactions
+    - post ledger adjustments and reversals
+    """
+    try:
+        data = request.get_json()
+        po = PurchaseOrder.query.get_or_404(id)
 
-    po.supplier_id = data.get('supplier_id', po.supplier_id)
-    po.invoice_number = data.get('invoice_number', po.invoice_number)
-    po.memo = data.get('memo', po.memo)
-    po.purchase_date = data.get('purchase_date', po.purchase_date)
+        if po.status == 9:
+            return jsonify({'error': 'Cannot update a deleted purchase order'}), 400
 
-    # Update items if provided
-    if 'items' in data:
-        for item_data in data['items']:
-            if 'id' in item_data:
-                # Update existing item
-                item = PurchaseOrderItem.query.get(item_data['id'])
-                if item and item.purchase_order_id == po.id:
-                    item.quantity = item_data.get('quantity', item.quantity)
-                    item.unit_price = item_data.get('unit_price', item.unit_price)
-                    item.calculate_total()
-            else:
-                # Add new item
+        # --- Update PO header ---
+        po.supplier_id = data.get('supplier_id', po.supplier_id)
+        po.invoice_number = data.get('invoice_number', po.invoice_number)
+        po.memo = data.get('memo', po.memo)
+        po.purchase_date = data.get('purchase_date', po.purchase_date)
+        db.session.add(po)
+
+        # Ensure transaction number exists for PO (use existing or generate)
+        if not po.transaction_no:
+            txn_id, txn_str = generate_transaction_number('CREDIT-PAY', transaction_date=po.purchase_date)
+            po.transaction_no = txn_id
+        txn_id = po.transaction_no
+
+        # ---- ITEMS: prepare maps for existing/new/removed ----
+        incoming_items = data.get('items', []) or []
+        incoming_item_ids = {it.get('id') for it in incoming_items if it.get('id')}
+        existing_items = [it for it in po.items if it.status != 9]
+        existing_item_map = {it.id: it for it in existing_items}
+
+        total_amount = 0.0
+
+        # 1) Soft-delete items removed from the update (and reverse their effects)
+        for old_item in existing_items:
+            if old_item.id not in incoming_item_ids:
+                # Reverse product stock
+                product = Product.query.get(old_item.product_id)
+                product_unit = ProductUnit.query.filter_by(id=old_item.unit_id).first()
+                qty_to_reverse = old_item.quantity
+                if product_unit and (product_unit.conversion_quantity or 1) > 1:
+                    qty_to_reverse = old_item.quantity * (product_unit.conversion_quantity or 1)
+                if product:
+                    product.quantity = max((product.quantity or 0) - qty_to_reverse, 0)
+                    db.session.add(product)
+
+                # Reverse returnable container stock
+                if old_item.unit_id:
+                    crate = ReturnableContainer.query.filter_by(product_unit_id=old_item.unit_id).first()
+                    if crate:
+                        crate.total_in_stock = max((crate.total_in_stock or 0) - old_item.quantity, 0)
+                        db.session.add(crate)
+                        db.session.add(ContainerTransaction(
+                            container_id=crate.id,
+                            transaction_type='Removed',
+                            quantity=old_item.quantity,
+                            unit_value=crate.unit_value or 0,
+                            total_value=(crate.unit_value or 0) * old_item.quantity,
+                            purchase_order_id=po.id,
+                            status=9
+                        ))
+
+                # Soft-delete associated inventory transactions (by purchase_order_id+product)
+                inv_txns = InventoryTransaction.query.filter_by(
+                    purchase_order_id=po.id, product_id=old_item.product_id, status=1
+                ).all()
+                for inv in inv_txns:
+                    inv.status = 9
+                    db.session.add(inv)
+
+                # Reverse GL entries that explicitly reference this PO (keep original approach consistent)
+                gl_entries = GeneralLedger.query.filter(
+                    GeneralLedger.description.ilike(f"%Credit for PO #{po.id}%"),
+                    GeneralLedger.status == 1
+                ).all()
+                for gl in gl_entries:
+                    # mark original as voided (optional) and add reversal entry
+                    # gl.status = 9
+                    # db.session.add(gl)
+                    reversed = GeneralLedger(
+                        transaction_no=gl.transaction_no,
+                        account_id=gl.account_id,
+                        transaction_type="Debit" if gl.transaction_type == "Credit" else "Credit",
+                        amount=gl.amount,
+                        description=f"Reversal of {gl.description}",
+                        transaction_date=datetime.utcnow(),
+                        status=1
+                    )
+                    db.session.add(reversed)
+
+                # Soft delete the item
+                old_item.status = 9
+                db.session.add(old_item)
+
+        # 2) Iterate incoming items: update existing or add new ones
+        for it in incoming_items:
+            # map names chosen in incoming payload: cost_price or unit_price? use cost_price as earlier
+            item_id = it.get('id')
+            product_id = it.get('product_id')
+            unit_id = it.get('unit_id')
+            new_qty = int(it.get('quantity', 0))
+            cost_price = float(it.get('cost_price', it.get('unit_price', 0)))
+
+            if item_id:  # update existing
+                item = PurchaseOrderItem.query.get(item_id)
+                if not item or item.status == 9:
+                    continue
+
+                old_qty = item.quantity or 0
+                old_unit_id = item.unit_id
+                old_unit = ProductUnit.query.filter_by(id=old_unit_id).first() if old_unit_id else None
+
+                # compute stock difference (consider conversion quantities)
+                convert = 1
+                if old_unit and (old_unit.conversion_quantity or 1) > 1:
+                    convert = old_unit.conversion_quantity
+                diff_qty = new_qty - old_qty
+                stock_adjustment = diff_qty * convert
+
+                # apply to product
+                product = Product.query.get(item.product_id)
+                if product:
+                    product.quantity = (product.quantity or 0) + stock_adjustment
+                    db.session.add(product)
+
+                # update item values
+                item.quantity = new_qty
+                item.unit_price = cost_price
+                item.unit_id = unit_id or item.unit_id
+                item.calculate_total()
+                db.session.add(item)
+
+                # inventory transaction: update or create
+                inv_txn = InventoryTransaction.query.filter_by(purchase_order_id=po.id,
+                                                              product_id=item.product_id,
+                                                              status=1).first()
+                if inv_txn:
+                    inv_txn.quantity = item.quantity
+                    inv_txn.unit_price = item.unit_price
+                    inv_txn.total_price = item.total_price
+                    db.session.add(inv_txn)
+                else:
+                    inv_txn = InventoryTransaction(
+                        transaction_no=txn_id,
+                        purchase_order_id=po.id,
+                        product_id=item.product_id,
+                        quantity=item.quantity,
+                        unit_price=item.unit_price,
+                        total_price=item.total_price,
+                        transaction_type='Received',
+                        status=1
+                    )
+                    db.session.add(inv_txn)
+
+                # container adjustments if flagged
+                if it.get('is_returnable') and item.unit_id:
+                    crate = ReturnableContainer.query.filter_by(product_unit_id=item.unit_id).first()
+                    if crate:
+                        crate.total_in_stock = (crate.total_in_stock or 0) + diff_qty
+                        db.session.add(crate)
+                        db.session.add(ContainerTransaction(
+                            container_id=crate.id,
+                            transaction_type='Purchase Adjustment',
+                            quantity=diff_qty,
+                            unit_value=crate.unit_value or 0,
+                            total_value=(crate.unit_value or 0) * diff_qty,
+                            purchase_order_id=po.id,
+                            status=1
+                        ))
+
+                total_amount += item.total_price
+
+            else:  # new item
+                product_unit = ProductUnit.query.filter_by(id=unit_id).first()
+                convert_qty = product_unit.conversion_quantity if product_unit else 1
+                stock_increase = new_qty * (convert_qty or 1)
+
                 new_item = PurchaseOrderItem(
                     purchase_order_id=po.id,
-                    product_id=item_data['product_id'],
-                    quantity=item_data['quantity'],
-                    unit_price=item_data['unit_price'],
+                    product_id=product_id,
+                    quantity=new_qty,
+                    unit_price=cost_price,
+                    unit_id=unit_id,
                     status=1
                 )
                 new_item.calculate_total()
                 db.session.add(new_item)
+                db.session.flush()  # to get id if needed
+
+                # update product stock
+                product = Product.query.get(product_id)
+                if product:
+                    product.quantity = (product.quantity or 0) + stock_increase
+                    db.session.add(product)
+
+                # handle returnable containers
+                if it.get('is_returnable') and unit_id:
+                    crate = ReturnableContainer.query.filter_by(product_unit_id=unit_id).first()
+                    if crate:
+                        crate.total_in_stock = (crate.total_in_stock or 0) + new_item.quantity
+                        db.session.add(crate)
+                        db.session.add(ContainerTransaction(
+                            container_id=crate.id,
+                            transaction_type='Purchase',
+                            quantity=new_item.quantity,
+                            unit_value=crate.unit_value or 0,
+                            total_value=(crate.unit_value or 0) * new_item.quantity,
+                            purchase_order_id=po.id,
+                            status=1
+                        ))
+
+                # create inventory transaction
+                inv_txn = InventoryTransaction(
+                    transaction_no=txn_id,
+                    purchase_order_id=po.id,
+                    product_id=new_item.product_id,
+                    quantity=new_item.quantity,
+                    unit_price=new_item.unit_price,
+                    total_price=new_item.total_price,
+                    transaction_type='Received',
+                    status=1
+                )
+                db.session.add(inv_txn)
+
+                total_amount += new_item.total_price
+
+        # -----------------------------
+        # PAYMENTS: sync payments if provided
+        # incoming payments payload structure:
+        # payments: [{ id?, amount, payment_date, payment_account_id, payment_type, reference }]
+        # -----------------------------
+        incoming_payments = data.get('payments', None)
+        if incoming_payments is not None:
+            # Build maps for existing payments
+            existing_payments = SupplierPayment.query.filter_by(purchase_order_id=po.id).all()
+            existing_payment_map = {p.id: p for p in existing_payments if p.status == 1}
+
+            incoming_payment_ids = {p.get('id') for p in incoming_payments if p.get('id')}
+
+            # 1) Soft-delete removed payments
+            for p in existing_payments:
+                if p.id not in incoming_payment_ids and p.status == 1:
+                    # void payment
+                    # p.status = 9
+                    # db.session.add(p)
+                    # Reverse GL entries related to this payment
+                    gl_payments = GeneralLedger.query.filter(
+                        GeneralLedger.description.ilike(f"%Payment for PO #{po.id}%"),
+                        GeneralLedger.transaction_no == p.transaction_no,
+                        GeneralLedger.status == 1
+                    ).all()
+                    for gl in gl_payments:
+                        gl.status = 9
+                        db.session.add(gl)
+                        reversed_entry = GeneralLedger(
+                            transaction_no=gl.transaction_no,
+                            account_id=gl.account_id,
+                            transaction_type="Debit" if gl.transaction_type == "Credit" else "Credit",
+                            amount=gl.amount,
+                            description=f"Reversal of {gl.description}",
+                            transaction_date=datetime.utcnow(),
+                            status=1
+                        )
+                        db.session.add(reversed_entry)
+
+            # 2) Update existing payments (if amount changed): create reversal then new GL
+            for inc in incoming_payments:
+                pid = inc.get('id')
+                if pid and pid in existing_payment_map:
+                    p = existing_payment_map[pid]
+                    new_amount = float(inc.get('amount', p.amount))
+                    # if amount changed -> reverse original GL and post new GL
+                    if abs(new_amount - (p.amount or 0)) > 0.0001:
+                        # mark original payment as replaced (soft-void)
+                        p.status = 9
+                        db.session.add(p)
+
+                        # reverse original GL
+                        gls = GeneralLedger.query.filter(
+                            GeneralLedger.transaction_no == p.transaction_no,
+                            GeneralLedger.status == 1
+                        ).all()
+                        for gl in gls:
+                            # gl.status = 9
+                            # db.session.add(gl)
+                            db.session.add(GeneralLedger(
+                                transaction_no=gl.transaction_no,
+                                account_id=gl.account_id,
+                                transaction_type="Debit" if gl.transaction_type == "Credit" else "Credit",
+                                amount=gl.amount,
+                                description=f"Reversal of {gl.description}",
+                                transaction_date=datetime.utcnow(),
+                                status=1
+                            ))
+
+                        # create new payment record with new txn_no and GL
+                        tx_id, tx_str = generate_transaction_number('SUPP-PAY', transaction_date=datetime.utcnow())
+                        new_p = SupplierPayment(
+                            purchase_order_id=po.id,
+                            payment_account_id=inc.get('payment_account_id'),
+                            amount=new_amount,
+                            payment_type=inc.get('payment_type', p.payment_type),
+                            reference=inc.get('reference', p.reference),
+                            transaction_no=tx_id,
+                            payment_date=datetime.strptime(inc.get('payment_date'), '%Y-%m-%d') if inc.get('payment_date') else datetime.utcnow(),
+                            status=1
+                        )
+                        db.session.add(new_p)
+
+                        # post GL for new payment
+                        acc = Account.query.get(new_p.payment_account_id)
+                        entries = [
+                            {"account_id": 3000, "transaction_type": "Debit", "amount": new_amount},  # AP
+                            {"account_id": acc.code if acc else 1100, "transaction_type": "Credit", "amount": new_amount}
+                        ]
+                        post_to_ledger(entries, transaction_no_id=tx_id,
+                                       description=f"Payment for PO #{po.id}", transaction_date=new_p.payment_date)
+
+                elif not pid:
+                    # New payment -> create and post GL
+                    new_amount = float(inc.get('amount', 0))
+                    if new_amount <= 0:
+                        continue
+                    tx_id, tx_str = generate_transaction_number('SUPP-PAY', transaction_date=datetime.strptime(inc.get('payment_date'), '%Y-%m-%d') if inc.get('payment_date') else datetime.utcnow())
+                    new_p = SupplierPayment(
+                        purchase_order_id=po.id,
+                        payment_account_id=inc.get('payment_account_id'),
+                        amount=new_amount,
+                        payment_type=inc.get('payment_type', 'Cash'),
+                        reference=inc.get('reference'),
+                        transaction_no=tx_id,
+                        payment_date=datetime.strptime(inc.get('payment_date'), '%Y-%m-%d') if inc.get('payment_date') else datetime.utcnow(),
+                        status=1
+                    )
+                    db.session.add(new_p)
+                    # post GL
+                    acc = Account.query.get(new_p.payment_account_id)
+                    entries = [
+                        {"account_id": 3000, "transaction_type": "Debit", "amount": new_amount},
+                        {"account_id": acc.code if acc else 1100, "transaction_type": "Credit", "amount": new_amount}
+                    ]
+                    post_to_ledger(entries, transaction_no_id=tx_id,
+                                   description=f"Payment for PO #{po.id}", transaction_date=new_p.payment_date)
+
+        # -----------------------------
+        # FINAL: recompute totals and post PO GL adjustment
+        # -----------------------------
+        # Recompute total_amount from active items
+        total_amount = sum(i.total_price for i in po.items if i.status != 9)
+        # Recompute total_paid from active payments
+        total_paid = sum(p.amount for p in SupplierPayment.query.filter_by(purchase_order_id=po.id, status=1).all())
+        po.total_amount = total_amount
+        po.total_paid = total_paid
+        po.total_balance = max(po.total_amount - po.total_paid, 0)
+
+        # set PO status (1=Ready/invoice, 2=Partially paid, 3=Paid, 4/5 other states)
+        if po.total_balance == 0:
+            po.status = 3
+        elif po.total_paid > 0:
+            po.status = 2
+        else:
+            po.status = 1
+
+        db.session.add(po)
+
+        # Post an updated PO GL (create new ledger entry to reflect updated totals)
+        # Use new txn number for the PO update
+        update_txn_id, update_txn_str = generate_transaction_number('PO-EDIT', transaction_date=po.purchase_date)
+        entries = [
+            {"account_id": 1400, "transaction_type": "Debit", "amount": po.total_amount},
+            {"account_id": 3000, "transaction_type": "Credit", "amount": po.total_amount},
+        ]
+        post_to_ledger(entries, transaction_no_id=update_txn_id,
+                       description=f"Updated Credit for PO #{po.id}", transaction_date=po.purchase_date)
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"Purchase Order #{po.id} updated successfully",
+            "po_id": po.id,
+            "total_amount": po.total_amount,
+            "total_paid": po.total_paid,
+            "total_balance": po.total_balance,
+            "status": po.status
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+# # Update purchase order details
+# @token_required
+# @suppliers_bp.route('/orders/<int:id>', methods=['PUT'])
+# def update_purchase_order(id):
+#     po = PurchaseOrder.query.get_or_404(id)
+#     data = request.get_json()
+
+#     po.supplier_id = data.get('supplier_id', po.supplier_id)
+#     po.invoice_number = data.get('invoice_number', po.invoice_number)
+#     po.memo = data.get('memo', po.memo)
+#     po.purchase_date = data.get('purchase_date', po.purchase_date)
+
+#     # Update items if provided
+#     if 'items' in data:
+#         for item_data in data['items']:
+#             if 'id' in item_data:
+#                 # Update existing item
+#                 item = PurchaseOrderItem.query.get(item_data['id'])
+#                 if item and item.purchase_order_id == po.id:
+#                     item.quantity = item_data.get('quantity', item.quantity)
+#                     item.unit_price = item_data.get('unit_price', item.unit_price)
+#                     item.calculate_total()
+#             else:
+#                 # Add new item
+#                 new_item = PurchaseOrderItem(
+#                     purchase_order_id=po.id,
+#                     product_id=item_data['product_id'],
+#                     quantity=item_data['quantity'],
+#                     unit_price=item_data['unit_price'],
+#                     status=1
+#                 )
+#                 new_item.calculate_total()
+#                 db.session.add(new_item)
 
 
 
-    # Recalculate totals
-    po.update_totals()
-    db.session.commit()
+#     # Recalculate totals
+#     po.update_totals()
+#     db.session.commit()
 
-    return jsonify({'message': 'Purchase Order updated successfully', 'id': po.id})
+#     return jsonify({'message': 'Purchase Order updated successfully', 'id': po.id})
 
 
 @token_required

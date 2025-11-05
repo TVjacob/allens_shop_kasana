@@ -40,6 +40,7 @@ import ReturnablesForm from '@/pages/ReturnablesForm.vue';
 import SalesProfitLoss from '@/pages/reports/SalesProfitLoss.vue';
 import CustomerManagement from '@/pages/CustomerManagement.vue';
 import EditSale from '@/pages/EditSale.vue';
+import EditPurchases from '@/pages/EditPurchases.vue';
 // import EditSale from '@/pages/EditSale.vue';
 
 const routes = [
@@ -104,7 +105,7 @@ const routes = [
       {
         path: '/purchase-orders/:id/edit',
         name: 'EditPurchaseOrder',
-        component: PurchaseOrderEdit,
+        component: EditPurchases,
         meta: { showGreeting: false, pageName: 'EditPurchaseOrder', requiresAuth: true,}
       },
       {

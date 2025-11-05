@@ -600,6 +600,8 @@ class ReturnableContainer(db.Model, StatusMixin):
             self.total_in_stock += quantity
         elif transaction_type == "Sold":
             self.total_sold +=quantity
+        elif transaction_type == 'Removed':
+            self.total_sold -=quantity
             # self.total_returned +=quantity
         else:
             raise ValueError(f"Invalid transaction type: {transaction_type}")
@@ -626,7 +628,7 @@ class ContainerTransaction(db.Model, StatusMixin):
     transaction_type = db.Column(
         db.String(20),
         nullable=False
-    )  # 'Issued', 'Returned', 'Received', 'Damaged','Purchased',"Sold"
+    )  # 'Issued', 'Returned', 'Received', 'Damaged','Purchased',"Sold","Removed"
 
     quantity = db.Column(db.Integer, nullable=False)
     unit_value = db.Column(db.Float, default=0.0)    # Cost per container

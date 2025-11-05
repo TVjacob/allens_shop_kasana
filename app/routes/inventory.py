@@ -4,6 +4,7 @@ from app.models import Product, Category, ProductUnit, PurchaseOrderItem, Return
 from datetime import datetime
 from sqlalchemy import desc, or_
 from app.utils.auth import token_required
+from app.utils.gl_utils import get_latest_purchase_price
 
 inventory_bp = Blueprint('inventory', __name__, url_prefix='/inventory')
 
@@ -86,13 +87,16 @@ def list_products():
     for p in products:
         category = db.session.query(Category).filter_by(id=p.category_id, status=1).first()
         # Get last purchase price for this unit
-        last_purchase = (
-            PurchaseOrderItem.query
-            .filter(PurchaseOrderItem.product_id==p.id, PurchaseOrderItem.status==1)
-            .order_by(desc(PurchaseOrderItem.created_at))
-            .first()
-        )
-        last_purchase_price = last_purchase.unit_price if last_purchase else 0
+        # last_purchase = (
+        #     PurchaseOrderItem.query
+        #     .filter(PurchaseOrderItem.product_id==p.id, PurchaseOrderItem.status==1)
+        #     .order_by(desc(PurchaseOrderItem.created_at))
+        #     .first()
+        # )
+        last_purchase_price=get_latest_purchase_price(p.id)
+        print(" last_purchase_price ",last_purchase_price)
+
+        # last_purchase_price = last_purchase.unit_price if last_purchase else 0
 
 
         result.append({
@@ -142,14 +146,9 @@ def list_products():
 def get_product(id):
     product = Product.query.get_or_404(id)
     category = Category.query.filter_by(id=product.category_id, status=1).first()
-    # Get last purchase price for this unit
-    last_purchase = (
-        PurchaseOrderItem.query
-        .filter(PurchaseOrderItem.product_id==product.id, PurchaseOrderItem.status==1)
-        .order_by(desc(PurchaseOrderItem.created_at))
-        .first()
-    )
-    last_purchase_price = last_purchase.unit_price if last_purchase else 0
+
+    last_purchase_price=get_latest_purchase_price(product.id)
+
 
 
     return jsonify({
@@ -212,14 +211,11 @@ def search_product():
 
     for p in products:
         category = db.session.query(Category).filter_by(id=p.category_id, status=1).first()
-        # Get last purchase price for this unit
-        last_purchase = (
-            PurchaseOrderItem.query
-            .filter(PurchaseOrderItem.product_id==p.id, PurchaseOrderItem.status==1)
-            .order_by(desc(PurchaseOrderItem.created_at))
-            .first()
-        )
-        last_purchase_price = last_purchase.unit_price if last_purchase else 0
+        # print("prints ",p.id)
+
+        last_purchase_price=get_latest_purchase_price(p.id)
+        print(" last_purchase_price ",last_purchase_price)
+
         result.append({
             "id": p.id,
             "name": p.name,
@@ -248,78 +244,6 @@ def search_product():
 
     return jsonify(result)
 
-# --- Update product (quantity cannot be manually updated here) ---
-# @token_required
-# @inventory_bp.route('/products/<int:id>', methods=['PUT'])
-# def update_product(id):
-#     product = Product.query.get_or_404(id)
-#     data = request.json
-#     product.name = data.get('name', product.name)
-#     product.sku = data.get('sku', product.sku)
-#     product.category_id = data.get('category_id', product.category_id)
-#     product.whole_price = data.get('whole_price', product.whole_price)
-#     # product.quantity = data.get('quantity', product.quantity)  # removed
-#     product.price = data.get('price', product.price)
-#     product.updated_at = datetime.utcnow()
-#     db.session.commit()
-#     return jsonify({"message": "Product updated", "product_id": product.id})
-
-
-
-
-# @token_required
-# @inventory_bp.route('/products/<int:id>', methods=['PUT'])
-# def update_product(id):
-#     product = Product.query.get_or_404(id)
-#     data = request.json
-
-#     product.name = data.get('name', product.name)
-#     product.sku = data.get('sku', product.sku)
-#     product.category_id = data.get('category_id', product.category_id)
-#     product.updated_at = datetime.utcnow()
-
-#     # --- Update product units if provided ---
-#     if 'units' in data:
-#         # Remove existing units and their containers
-#         existing_units = ProductUnit.query.filter_by(product_id=product.id).all()
-#         for unit in existing_units:
-#             # Delete linked containers
-#             ReturnableContainer.query.filter_by(product_unit_id=unit.id).delete()
-#         ProductUnit.query.filter_by(product_id=product.id).delete()
-
-#         # Add new units
-#         for unit_data in data['units']:
-#             unit = ProductUnit(
-#                 product_id=product.id,
-#                 unit_name=unit_data.get('unit_name'),
-#                 conversion_quantity=unit_data.get('conversion_quantity', 1),
-#                 retail_price=unit_data.get('retail_price', 0.0),
-#                 wholesale_price=unit_data.get('wholesale_price', 0.0),
-#                 cost_price=unit_data.get('cost_price', 0.0),
-#                 is_returnable=unit_data.get('is_returnable', False),
-#                 status=1,
-#             )
-#             db.session.add(unit)
-#             db.session.flush()
-
-#             # --- Automatically create ReturnableContainer if unit is returnable ---
-#             if unit.is_returnable and unit.conversion_quantity>1:
-#                 container = ReturnableContainer(
-#                     name=f"{unit.unit_name} Container",
-#                     description=f"Container for {unit.unit_name} of {product.name}",
-#                     unit_value=unit_data.get('cost_price', 0.0),
-#                     total_in_stock=0,
-#                     product_unit_id=unit.id,
-#                     status =1,
-#                 )
-#                 db.session.add(container)
-
-#     db.session.commit()
-
-#     return jsonify({
-#         "message": "Product, units, and returnable containers updated successfully",
-#         "product_id": product.id
-#     })
 
 @token_required
 @inventory_bp.route('/products/<int:id>', methods=['PUT'])

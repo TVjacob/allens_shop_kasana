@@ -28,6 +28,19 @@
       </button>
     </div>
 
+    <!-- Product Search -->
+    <div class="mb-4 flex items-center gap-2">
+      <input
+        v-model="productSearchQuery"
+        @input="onProductSearch"
+        placeholder="🔍 Search product in current purchase items"
+        class="px-3 py-2 border rounded-lg w-64 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+      />
+      <span v-if="productSearchQuery" class="text-gray-500 text-sm">
+        Showing results for "{{ productSearchQuery }}"
+      </span>
+    </div>
+
     <!-- Purchase Orders Table -->
     <div class="overflow-x-auto border rounded-lg shadow-lg">
       <table class="min-w-full border-collapse">
@@ -86,6 +99,11 @@
               </router-link>
             </td>
           </tr>
+          <tr v-if="filteredPurchaseOrders.length === 0">
+            <td colspan="9" class="p-4 text-center text-gray-500">
+              No purchase orders found.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -102,6 +120,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import debounce from 'lodash.debounce';
 import api from '../api';
 import PaymentPurchaseModal from './PaymentPurchaseModal.vue';
 
@@ -114,6 +133,17 @@ const selectedPO = ref(null);
 const activeTabClass = 'px-4 py-2 rounded bg-indigo-600 text-white transition transform hover:scale-105';
 const inactiveTabClass = 'px-4 py-2 rounded bg-gray-200 text-gray-700 transition transform hover:scale-105';
 
+// Product Search
+const productSearchQuery = ref('')
+const filteredSaleItems = computed(() => {
+  if (!productSearchQuery.value) return purchaseOrders.value
+  return purchaseOrders.value.filter(po =>
+    po.items?.some(item => item.product_name.toLowerCase().includes(productSearchQuery.value.toLowerCase()))
+  )
+})
+const onProductSearch = debounce(() => {}, 300);
+
+// Fetch Data
 const fetchPurchaseOrders = async () => {
   try {
     const res = await api.get('/suppliers/orders');
@@ -132,20 +162,23 @@ const fetchAccounts = async () => {
   }
 };
 
+// Filtered by tab
 const filteredPurchaseOrders = computed(() => {
+  const orders = productSearchQuery.value ? filteredSaleItems.value : purchaseOrders.value;
   return currentTab.value === 'paid'
-    ? purchaseOrders.value.filter(po => po.total_balance === 0)
-    : purchaseOrders.value.filter(po => po.total_balance > 0);
+    ? orders.filter(po => po.total_balance === 0)
+    : orders.filter(po => po.total_balance > 0);
 });
 
+// Helpers
 const formatDate = dateStr => new Date(dateStr).toLocaleDateString();
+const formatPrice = val => Number(val || 0).toLocaleString('en-UG');
 
+// Actions
 const openPaymentModal = po => {
   selectedPO.value = po;
   showPaymentModal.value = true;
 };
-const formatPrice = (value) => (value == null ? '0' : new Intl.NumberFormat('en-UG').format(value))
-
 const refreshPurchaseOrders = () => fetchPurchaseOrders();
 
 // Export placeholders

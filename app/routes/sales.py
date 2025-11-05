@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import Account, BottleTransaction, Category, ContainerTransaction, Customer, InventoryTransaction, Payment, Product, ProductUnit, PurchaseOrderItem, ReturnableContainer, Sale, SaleItem, GeneralLedger
 from app.utils.auth import token_required
-from app.utils.gl_utils import post_to_ledger, generate_transaction_number_partone,generate_transaction_number
+from app.utils.gl_utils import get_latest_purchase_price, post_to_ledger, generate_transaction_number_partone,generate_transaction_number
 from datetime import datetime
 
 sales_bp = Blueprint('sales', __name__, url_prefix='/sales')
@@ -131,15 +131,17 @@ def create_sale():
             db.session.add(product)
 
             # --- Get latest purchase price ---
-            latest_purchase = (
-                PurchaseOrderItem.query
-                .filter(PurchaseOrderItem.product_id == product.id,PurchaseOrderItem.unit_id== unit_id)
-                .order_by(PurchaseOrderItem.created_at.desc())
-                .first()
-            )
+            # latest_purchase = (
+            #     PurchaseOrderItem.query
+            #     .filter(PurchaseOrderItem.product_id == product.id,PurchaseOrderItem.unit_id== unit_id)
+            #     .order_by(PurchaseOrderItem.created_at.desc())
+            #     .first()
+            # )
+            latest_purchase=get_latest_purchase_price(product.id,unit_id,sale_date)
             purchase_price = latest_purchase.unit_price if latest_purchase else 0.0
             cogs_total += purchase_price * consumption_qty
             total_amount += total_price
+
 
             # --- Create SaleItem ---
             sale_item = SaleItem(
@@ -333,8 +335,8 @@ def delete_sale_permanently(sale_id):
 
         for gl in ledger_txns:
             # 1️⃣ Mark old as deleted
-            gl.status = 9
-            db.session.add(gl)
+            # gl.status = 1
+            # db.session.add(gl)
 
             # 2️⃣ Create reversal entry (debit ↔ credit)
             reversed_entry = GeneralLedger(
@@ -904,11 +906,12 @@ def create_or_update_sale():
             db.session.add(product)
 
             # COGS
-            latest_purchase = (PurchaseOrderItem.query
-                               .filter(PurchaseOrderItem.product_id == product.id,
-                                       PurchaseOrderItem.unit_id == unit_id)
-                               .order_by(PurchaseOrderItem.created_at.desc())
-                               .first())
+            # latest_purchase = (PurchaseOrderItem.query
+            #                    .filter(PurchaseOrderItem.product_id == product.id,
+            #                            PurchaseOrderItem.unit_id == unit_id)
+            #                    .order_by(PurchaseOrderItem.created_at.desc())
+            #                    .first())
+            latest_purchase = get_latest_purchase_price(product.id,unit_id,sale_date)
             purchase_price = latest_purchase.unit_price if latest_purchase else 0.0
             cogs_total += purchase_price * consumption_qty
             total_amount += total_price
