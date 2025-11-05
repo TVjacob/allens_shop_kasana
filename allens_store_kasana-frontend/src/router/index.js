@@ -41,6 +41,7 @@ import SalesProfitLoss from '@/pages/reports/SalesProfitLoss.vue';
 import CustomerManagement from '@/pages/CustomerManagement.vue';
 import EditSale from '@/pages/EditSale.vue';
 import EditPurchases from '@/pages/EditPurchases.vue';
+import PurchasedProducts from '@/pages/reports/PurchasedProducts.vue';
 // import EditSale from '@/pages/EditSale.vue';
 
 const routes = [
@@ -107,6 +108,12 @@ const routes = [
         name: 'EditPurchaseOrder',
         component: EditPurchases,
         meta: { showGreeting: false, pageName: 'EditPurchaseOrder', requiresAuth: true,}
+      },
+      {
+        path: '/products_purhcased',
+        name: 'Purchased Products',
+        component: PurchasedProducts,
+        meta: { showGreeting: false, pageName: 'Purchased Products', requiresAuth: true,}
       },
       {
         path: '/profile',

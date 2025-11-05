@@ -5,6 +5,8 @@ from sqlalchemy import desc, func
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload
 
+from sqlalchemy.orm import joinedload
+
 from app.utils.auth import token_required
 from flask import request, jsonify
 from sqlalchemy import func, and_, cast, String,or_,case
@@ -1970,3 +1972,98 @@ def sales_profit_loss():
         "summary": summary,
         "sales": report_items
     })
+
+
+
+
+
+from sqlalchemy.orm import joinedload
+
+
+@token_required
+@reports_bp.route("/products_purhcased", methods=["GET"])
+def get_pruchased_products():
+    search = request.args.get("search")
+    return {"data":get_purchase_orders(search)}
+
+def get_purchase_orders(search=None):
+    """
+    Returns a list of purchase orders with details including product, unit, supplier, category, and quantities.
+    Supports search by product name, invoice number, or supplier name.
+    
+    Args:
+        search (str, optional): Search term to filter by product name, invoice number, or supplier name.
+    
+    Returns:
+        list of dict: Each dict contains purchase order details and product/unit info.
+    """
+
+    # Base query: eager load supplier, items, product, unit, and product category
+    query = PurchaseOrder.query.options(
+        joinedload(PurchaseOrder.supplier),
+        joinedload(PurchaseOrder.items)
+            .joinedload(PurchaseOrderItem.product)
+            .joinedload(Product.category),
+        joinedload(PurchaseOrder.items).joinedload(PurchaseOrderItem.unit)
+    )
+
+    # Apply search filter if given
+    if search:
+        search_term = f"%{search}%"
+        query = query.join(PurchaseOrder.supplier)\
+                     .join(PurchaseOrder.items)\
+                     .join(PurchaseOrderItem.product)\
+                     .filter(
+            db.or_(
+                Product.name.ilike(search_term),
+                PurchaseOrder.invoice_number.ilike(search_term),
+                Supplier.name.ilike(search_term)
+            )
+        )
+
+    # Order by most recent purchases
+    query = query.order_by(PurchaseOrder.purchase_date.desc())
+
+    results = []
+
+    for po in query.all():
+        po_data = {
+            "purchase_order_id": po.id,
+            "invoice_number": po.invoice_number,
+            "supplier_name": po.supplier.name,
+            "purchase_date": po.purchase_date.strftime("%Y-%m-%d %H:%M:%S") if po.purchase_date else None,
+            "total_amount": po.total_amount,
+            "total_paid": po.total_paid,
+            "total_balance": po.total_balance,
+            "items": []
+        }
+
+        for item in po.items:
+            # Skip inactive items
+            if item.status != 1:
+                continue
+
+            unit_name = item.unit.unit_name if item.unit else "Base"
+            conversion_qty = item.unit.conversion_quantity if item.unit else 1
+            converted_qty = item.quantity * conversion_qty
+
+            category_name = item.product.category.name if item.product and item.product.category_id else None
+
+            item_data = {
+                "product_name": item.product.name if item.product else None,
+                "product_id": item.product_id,
+                "category_name": category_name,
+                "unit_name": unit_name,
+                "conversion_quantity": conversion_qty,
+                "quantity_purchased": item.quantity,
+                "converted_quantity": converted_qty,
+                "unit_price": item.unit_price,
+                "total_price": item.total_price
+            }
+
+            po_data["items"].append(item_data)
+
+        results.append(po_data)
+
+    return results
+

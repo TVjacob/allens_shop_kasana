@@ -53,6 +53,7 @@ class Product(db.Model, StatusMixin):
     quantity = db.Column(db.Integer, default=0)
     price = db.Column(db.Float, default=0)
     whole_price = db.Column(db.Float, default=0)
+    category = db.relationship('Category', backref='products', lazy=True)
 
     # created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -143,6 +144,9 @@ class PurchaseOrderItem(db.Model, StatusMixin):
     status= db.Column(db.Integer, nullable=False,default=1)
     product = db.relationship('Product', backref='purchase_order_items', lazy=True)
     unit_id = db.Column(db.Integer, db.ForeignKey('product_unit.id'), nullable=True)
+
+        # <-- Add this relationship
+    unit = db.relationship('ProductUnit', backref='purchase_order_items', lazy=True)
 
     def __repr__(self):
         return f"<POItem ProductID={self.product_id} Qty={self.quantity}>"
