@@ -2,7 +2,7 @@
   <div class="p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen">
     <h1 class="text-3xl font-bold mb-6 text-gray-800">Sales List</h1>
 
-    <!-- 🔹 Tabs + Search -->
+    <!-- 🔹 Tabs + Search + Date Filter -->
     <div class="flex flex-wrap gap-2 mb-6 items-center">
       <button
         :class="currentTab === 'paid' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'"
@@ -21,9 +21,20 @@
 
       <input
         v-model="searchQuery"
-        placeholder="🔍 Search by sale number or ID"
+        placeholder="🔍 Search by sale number, ID or customer"
         class="ml-auto px-3 py-2 border rounded-lg w-64 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+        @input="fetchSales"
       />
+
+      <input type="date" v-model="startDate" class="px-3 py-2 border rounded-lg" @change="fetchSales"/>
+      <input type="date" v-model="endDate" class="px-3 py-2 border rounded-lg" @change="fetchSales"/>
+    </div>
+
+    <!-- 🔹 Totals -->
+    <div class="mb-4 text-right font-semibold">
+      <span class="mr-4">Total Amount: {{ formatCurrency(totalAmount) }}</span>
+      <span class="mr-4">Total Paid: {{ formatCurrency(totalPaid) }}</span>
+      <span>Total Balance: {{ formatCurrency(totalBalance) }}</span>
     </div>
 
     <!-- 🔹 Sales Table -->
@@ -45,7 +56,7 @@
         <tbody>
           <tr
             v-for="sale in filteredSales"
-            :key="sale.id"
+            :key="sale.sale_id"
             class="hover:bg-gray-50 transition cursor-pointer"
           >
             <td class="p-2 border">{{ sale.sale_id }}</td>
@@ -93,7 +104,6 @@
                 >
                   Edit
                 </button>
-
             </td>
           </tr>
 
@@ -139,16 +149,12 @@ import ReportModal from './ReportModal.vue';
 import { useRouter } from 'vue-router';
 const router = useRouter();
 
-const editSale = (sale) => {
-  // Navigate to sales report or edit page
-  router.push(`/editsales/${sale.sale_id}`);
-};
-
-
 const currentTab = ref('unpaid');
 const sales = ref([]);
 const accounts = ref([]);
 const searchQuery = ref('');
+const startDate = ref(new Date().toISOString().substr(0,10)); // today
+const endDate = ref(new Date().toISOString().substr(0,10));   // today
 
 // Modals
 const showPaymentModal = ref(false);
@@ -163,10 +169,15 @@ const showToast = (msg) => {
   setTimeout(() => (toast.value.visible = false), 3000);
 };
 
-// Fetch sales
+// Fetch sales from API with search and date filters
 const fetchSales = async () => {
   try {
-    const res = await api.get('/sales/');
+    const params = {
+      search: searchQuery.value,
+      start_date: startDate.value,
+      end_date: endDate.value
+    };
+    const res = await api.get('/sales/', { params });
     sales.value = res.data.map(s => ({ ...s, balance: s.balance }));
   } catch (err) {
     console.error(err);
@@ -183,15 +194,22 @@ const fetchAccounts = async () => {
   }
 };
 
-// Filtered sales + search
+// Filtered sales by tab
 const filteredSales = computed(() => {
   return sales.value
-    .filter(s => currentTab.value === 'paid' ? s.balance <= 0 : s.balance > 0)
-    .filter(s =>
-      s.sale_number.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      s.sale_id.toString().includes(searchQuery.value)
-    );
+    .filter(s => currentTab.value === 'paid' ? s.balance <= 0 : s.balance > 0);
 });
+
+// Totals
+const totalAmount = computed(() =>
+  filteredSales.value.reduce((sum, s) => sum + Number(s.total_amount || 0), 0)
+);
+const totalPaid = computed(() =>
+  filteredSales.value.reduce((sum, s) => sum + Number(s.total_paid || 0), 0)
+);
+const totalBalance = computed(() =>
+  filteredSales.value.reduce((sum, s) => sum + Number(s.balance || 0), 0)
+);
 
 // Helpers
 const formatDate = dateStr => new Date(dateStr).toLocaleDateString();
@@ -212,11 +230,9 @@ const previewPaymentReport = async saleId => {
   }
 };
 
-// 🔹 Confirm & Delete Sale
+// Confirm & Delete Sale
 const confirmDeleteSale = async (sale) => {
-  if (!confirm(`Are you sure you want to delete sale ${sale.sale_number}? This will reverse all related entries.`)) {
-    return;
-  }
+  if (!confirm(`Are you sure you want to delete sale ${sale.sale_number}? This will reverse all related entries.`)) return;
   try {
     await api.delete(`/sales/${sale.sale_id}/delete`);
     showToast(`✅ Sale ${sale.sale_number} deleted & reversed successfully`);
@@ -226,6 +242,9 @@ const confirmDeleteSale = async (sale) => {
     showToast(`❌ Error deleting sale: ${err.response?.data?.error || err.message}`);
   }
 };
+
+// Edit Sale
+const editSale = (sale) => router.push(`/editsales/${sale.sale_id}`);
 
 onMounted(() => {
   fetchSales();

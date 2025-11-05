@@ -597,36 +597,59 @@ def delete_sale_permanently(sale_id):
 #         db.session.rollback()
 #         return jsonify({"error": str(e)}), 500
 
-
-# ------------------ Get All Sales ------------------ #
+# ------------------ Get All Sales with Search & Date Filter ------------------ #
 @token_required
 @sales_bp.route('/', methods=['GET'])
 def get_sales():
     """
-    Retrieve all active sales with their customer details and sale items.
+    Retrieve all active sales with optional filters:
+    - search: customer name, sale_number
+    - start_date, end_date: filter by sale_date
     """
     try:
-        sales = (
-            Sale.query
-            .filter(Sale.status.in_([1, 2, 3, 4]))
-            .order_by(Sale.id.desc())
-            .all()
-        )
+        # Get query params
+        search = request.args.get('search', type=str)
+        start_date = request.args.get('start_date', type=str)
+        end_date = request.args.get('end_date', type=str)
 
+        # Base query
+        query = Sale.query.filter(Sale.status.in_([1, 2, 3, 4]))
+
+        # Filter by date range if provided
+        if start_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            query = query.filter(Sale.sale_date >= start_dt)
+        if end_date:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            # Include entire end day
+            end_dt = end_dt.replace(hour=23, minute=59, second=59)
+            query = query.filter(Sale.sale_date <= end_dt)
+
+        # Filter by search term if provided
+        if search:
+            search_term = f"%{search}%"
+            query = query.join(Customer, isouter=True).filter(
+                db.or_(
+                    Sale.sale_number.ilike(search_term),
+                    Customer.name.ilike(search_term)
+                )
+            )
+
+        # Order results
+        sales = query.order_by(Sale.id.desc()).all()
+
+        # Serialize results
         data = []
         for s in sales:
-            # --- Get customer info ---
-            customer = s.customer  # assuming relationship Sale -> Customer exists
+            customer = s.customer
             customer_data = {
                 "id": customer.id if customer else None,
-                "name": customer.name if customer else "Unknown",
-                "mobile": getattr(customer, "mobile", None),
+                "name": customer.name if customer else "Walk-in",
+                "mobile": getattr(customer, "phone", None),
                 "email": getattr(customer, "email", None),
                 "address": getattr(customer, "address", None),
             }
 
-            # --- Get sale items ---
-            sale_items = SaleItem.query.filter_by(sale_id=s.id, status=1).all()
             items = [
                 {
                     "product_id": i.product_id,
@@ -635,18 +658,17 @@ def get_sales():
                     "unit_price": i.unit_price,
                     "total_price": i.total_price,
                 }
-                for i in sale_items
+                for i in s.items if i.status == 1
             ]
 
-            # --- Append final record ---
             data.append({
                 "sale_id": s.id,
                 "sale_number": s.sale_number,
                 "total_amount": s.total_amount,
                 "payment_status": s.payment_status,
-                "sale_date": s.sale_date,
-                "created_at": s.created_at,
-                "updated_at": s.updated_at,
+                "sale_date": s.sale_date.strftime("%Y-%m-%d"),
+                "created_at": s.created_at.strftime("%Y-%m-%d %H:%M:%S") if s.created_at else None,
+                "updated_at": s.updated_at.strftime("%Y-%m-%d %H:%M:%S") if s.updated_at else None,
                 "balance": s.balance,
                 "total_paid": s.total_paid,
                 "customer": customer_data,
@@ -657,6 +679,66 @@ def get_sales():
 
     except Exception as e:
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# # ------------------ Get All Sales ------------------ #
+# @token_required
+# @sales_bp.route('/', methods=['GET'])
+# def get_sales():
+#     """
+#     Retrieve all active sales with their customer details and sale items.
+#     """
+#     try:
+#         sales = (
+#             Sale.query
+#             .filter(Sale.status.in_([1, 2, 3, 4]))
+#             .order_by(Sale.id.desc())
+#             .all()
+#         )
+
+#         data = []
+#         for s in sales:
+#             # --- Get customer info ---
+#             customer = s.customer  # assuming relationship Sale -> Customer exists
+#             customer_data = {
+#                 "id": customer.id if customer else None,
+#                 "name": customer.name if customer else "Unknown",
+#                 "mobile": getattr(customer, "mobile", None),
+#                 "email": getattr(customer, "email", None),
+#                 "address": getattr(customer, "address", None),
+#             }
+
+#             # --- Get sale items ---
+#             sale_items = SaleItem.query.filter_by(sale_id=s.id, status=1).all()
+#             items = [
+#                 {
+#                     "product_id": i.product_id,
+#                     "product_name": i.product_name,
+#                     "quantity": i.quantity,
+#                     "unit_price": i.unit_price,
+#                     "total_price": i.total_price,
+#                 }
+#                 for i in sale_items
+#             ]
+
+#             # --- Append final record ---
+#             data.append({
+#                 "sale_id": s.id,
+#                 "sale_number": s.sale_number,
+#                 "total_amount": s.total_amount,
+#                 "payment_status": s.payment_status,
+#                 "sale_date": s.sale_date,
+#                 "created_at": s.created_at,
+#                 "updated_at": s.updated_at,
+#                 "balance": s.balance,
+#                 "total_paid": s.total_paid,
+#                 "customer": customer_data,
+#                 "items": items,
+#             })
+
+#         return jsonify(data), 200
+
+#     except Exception as e:
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 # ------------------ Get Sale for Edit Form (with Category) ------------------ #
 # ------------------ Get Sale for Edit (Full Details) ------------------ #
