@@ -88,8 +88,8 @@ def get_latest_purchase_price(product_id, unit_id=None, up_to_date=None):
         if result:
             purchase_item, conversion_quantity = result
             # Apply conversion
-            if conversion_quantity and conversion_quantity > 0:
-                return round(purchase_item.unit_price / conversion_quantity, 2)
+            # if conversion_quantity and conversion_quantity > 0:
+            #     return round(purchase_item.unit_price / conversion_quantity, 2)
             return round(purchase_item.unit_price, 2)
 
     # Fallback: latest purchase for any unit
