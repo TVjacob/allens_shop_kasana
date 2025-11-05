@@ -79,6 +79,7 @@
             <th class="p-3 border min-w-[220px]">Product</th>
             <th class="p-3 border min-w-[80px] text-center">Stock</th>
             <th class="p-3 border min-w-[140px]">Unit</th>
+            <th class="p-3 border min-w-[140px]">Sale Type </th>
             <th class="p-3 border min-w-[100px] text-center">Retail</th>
             <th class="p-3 border min-w-[100px] text-center">Wholesale</th>
             <th class="p-3 border min-w-[120px] text-center">Divide by Rate</th>
@@ -135,12 +136,35 @@
                 {{ saleItemsErrors[idx].unit_id }}
               </p>
             </td>
+            <!-- Sale Type -->
+            <td class="p-3 border text-center">
+              <select
+                v-model="item.sale_type"
+                @change="updateSaleType(item)"
+                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+              >
+                <option value="retail">Retail</option>
+                <option value="wholesale">Wholesale</option>
+              </select>
+            </td>
 
             <!-- Prices & Quantity -->
-            <td class="p-3 border text-center">{{ formatPrice(item.retail_price) }}</td>
-            <td class="p-3 border text-center">{{ formatPrice(item.wholesale_price) }}</td>
+            <!-- <td class="p-3 border text-center">{{ formatPrice(item.retail_price) }}</td>
+            <td class="p-3 border text-center">{{ formatPrice(item.wholesale_price) }}</td> -->
+            <!-- Retail Price -->
+            <td class="p-3 border text-center" v-if="item.sale_type === 'retail'">
+              {{ formatPrice(item.retail_price) }}
+            </td>
+            <td class="p-3 border text-center" v-else></td>
 
-            <td class="p-3 border">
+            <!-- Wholesale Price -->
+            <td class="p-3 border text-center" v-if="item.sale_type === 'wholesale'">
+              {{ formatPrice(item.wholesale_price) }}
+            </td>
+            <td class="p-3 border text-center" v-else></td>
+
+
+            <td class="p-3 border" v-if="Number(item.conversion_quantity) <= 1">
               <input
                 type="number"
                 v-model.number="item.rate"
@@ -150,8 +174,10 @@
                 class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
               />
             </td>
+            <td class="p-3 border" v-else></td>
 
-            <td class="p-3 border">
+
+            <td class="p-3 border"  v-if="Number(item.conversion_quantity) <= 1">
               <input
                 type="number"
                 v-model.number="item.quantity_number"
@@ -161,6 +187,8 @@
                 class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
               />
             </td>
+            <td class="p-3 border" v-else></td>
+
 
             <td class="p-3 border">
               <input
@@ -253,6 +281,14 @@ const saleHeaderErrors = reactive({
   amount_paid: '',
   sale_date: ''
 })
+const updateSaleType = (item) => {
+  if (item.sale_type === 'retail') {
+    item.unit_price = item.retail_price || 0
+  } else {
+    item.unit_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
+}
 
 // ---------- State ----------
 const saleItems = ref([])
