@@ -67,7 +67,7 @@
               <td class="p-3">{{ expense.description }}</td>
               <td class="p-3 text-right">{{ expense.total_amount.toFixed(2) }}</td>
               <td class="p-3">{{ expense.reference }}</td>
-              <td class="p-3">{{ formatDate(expense.expense_date) }}</td>
+              <td class="p-3">{{ expense.expense_date }}</td>
               <td class="p-3">{{ expense.transaction_no }}</td>
               <td class="p-3 text-center flex flex-wrap gap-1 justify-center">
                 <button @click="editExpense(expense)" class="bg-blue-400 hover:bg-blue-500 text-white px-2 py-1 rounded shadow transition transform hover:scale-105">Edit</button>
@@ -477,7 +477,7 @@ export default {
         doc.autoTable({
           head: [["ID", "Description", "Total Amount", "Reference", "Expense Date", "Transaction No"]],
           body: this.expenses.map(e => [
-            e.id, e.description, e.total_amount, e.reference, this.formatDate(e.expense_date), e.transaction_no
+            e.id, e.description, e.total_amount, e.reference, e.expense_date, e.transaction_no
           ])
         });
         doc.save("expenses.pdf");

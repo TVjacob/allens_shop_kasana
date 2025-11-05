@@ -134,7 +134,8 @@ def list_products():
                         for c in u.containers
                     ]
                 }
-                for u in p.units
+                for u in p.units if u.status != 9  # ✅ include only active units
+
             ]
         })
 
@@ -185,7 +186,7 @@ def get_product(id):
                     }
                     for c in u.containers
                 ]
-            } for u in product.units
+            } for u in product.units if u.status != 9 
         ]
     })
 
@@ -238,7 +239,7 @@ def search_product():
                     "wholesale_price": u.wholesale_price,
                     "is_returnable": u.is_returnable,
                     "unit_code": u.unit_code
-                } for u in p.units
+                } for u in p.units if u.status != 9  
             ]
         })
 
@@ -431,7 +432,7 @@ def get_product_units(product_id):
                 } for c in u.containers
             ]
         }
-        for u in units
+        for u in units if u.status != 9  
     ]
 
     return jsonify(result), 200

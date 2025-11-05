@@ -1,5 +1,23 @@
 <template>
   <div class="p-6 space-y-6">
+    <!-- ---------------- Period Selector ---------------- -->
+    <div class="flex flex-wrap gap-4 items-center">
+      <label class="font-bold">Select Period:</label>
+      <select v-model="selectedPeriod" @change="fetchDashboard" class="border rounded px-2 py-1">
+        <option value="today">Today</option>
+        <option value="week">This Week</option>
+        <option value="month">This Month</option>
+        <option value="custom">Custom</option>
+      </select>
+
+      <!-- Custom Date Range Picker -->
+      <div v-if="selectedPeriod === 'custom'" class="flex gap-2 items-center">
+        <input type="date" v-model="customStartDate" class="border rounded px-2 py-1" @change="fetchDashboard">
+        <span>to</span>
+        <input type="date" v-model="customEndDate" class="border rounded px-2 py-1" @change="fetchDashboard">
+      </div>
+    </div>
+
     <!-- ---------------- Metrics Cards ---------------- -->
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
       <div v-for="card in metricCards" :key="card.title" class="bg-white shadow rounded p-5 flex flex-col justify-between">
@@ -73,6 +91,11 @@ export default {
   components: { LineChart },
   data() {
     return {
+      // Period
+      selectedPeriod: 'today',
+      customStartDate: '',
+      customEndDate: '',
+
       // Metrics
       totalProducts: 0,
       totalSales: 0,
@@ -109,7 +132,13 @@ export default {
   methods: {
     async fetchDashboard() {
       try {
-        const res = await api.get('/dashboard/metrics');
+        const params = { period: this.selectedPeriod };
+        if (this.selectedPeriod === 'custom' && this.customStartDate && this.customEndDate) {
+          params.start_date = this.customStartDate;
+          params.end_date = this.customEndDate;
+        }
+
+        const res = await api.get('/dashboard/metrics', { params });
         const data = res.data;
 
         this.totalProducts = data.totalProducts;
@@ -163,5 +192,5 @@ export default {
 </script>
 
 <style scoped>
-/* Optional: Customize card hover effect */
+/* Optional: customize card hover effects */
 </style>
