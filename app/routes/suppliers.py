@@ -1272,6 +1272,9 @@ def edit_purchase_order(id):
                     status=1
                 ))
 
+    # --- Recalculate totals correctly ---
+    po.update_totals()
+
     # --- Recalculate totals and handle payments ---
     po.update_totals()
     new_total = po.total_amount

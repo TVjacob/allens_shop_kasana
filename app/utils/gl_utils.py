@@ -54,6 +54,57 @@ def post_to_ledger(entries, transaction_no_id, description=None, transaction_dat
 
 from sqlalchemy.orm import aliased
 
+
+
+def get_latest_purchase_price_no_rounds(product_id, unit_id=None, up_to_date=None):
+    """
+    Get the latest purchase price for a given product and optional unit and date.
+    Uses INNER JOIN with ProductUnit and conversion_quantity for proper unit price conversion.
+    """
+    print("unit_id:", unit_id)
+
+    # Alias ProductUnit
+    # Unit = aliased(ProductUnit)
+
+    # Build query using INNER JOIN with ProductUnit
+    query = (
+        db.session.query(PurchaseOrderItem, ProductUnit.conversion_quantity)
+        .join(ProductUnit, ProductUnit.id == PurchaseOrderItem.unit_id)
+        .filter(
+            PurchaseOrderItem.product_id == product_id,
+            PurchaseOrderItem.status == 1
+        )
+    )
+
+    # Filter by date if provided
+    if up_to_date:
+        query = query.join(PurchaseOrder).filter(PurchaseOrder.purchase_date <= up_to_date)
+
+    # Try exact unit match first
+    if unit_id:
+        result = (
+            query.filter(PurchaseOrderItem.unit_id == unit_id)
+            .order_by(PurchaseOrderItem.created_at.desc())
+            .first()
+        )
+        if result:
+            purchase_item, conversion_quantity = result
+            # Apply conversion
+            # if conversion_quantity and conversion_quantity > 0:
+            #     return round(purchase_item.unit_price / conversion_quantity, 2)
+            return round(purchase_item.unit_price, 2) ,True
+
+    # Fallback: latest purchase for any unit
+    result = query.order_by(PurchaseOrderItem.created_at.desc()).first()
+    if not result:
+        return 0.0
+
+    purchase_item, conversion_quantity = result
+    
+    if conversion_quantity and conversion_quantity > 0:
+        return purchase_item.unit_price / conversion_quantity , False
+    return purchase_item.unit_price ,False
+
 def get_latest_purchase_price(product_id, unit_id=None, up_to_date=None):
     """
     Get the latest purchase price for a given product and optional unit and date.

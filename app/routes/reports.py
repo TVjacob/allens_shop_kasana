@@ -9,7 +9,7 @@ from app.utils.auth import token_required
 from flask import request, jsonify
 from sqlalchemy import func, and_, cast, String,or_,case
 
-from app.utils.gl_utils import get_latest_purchase_price
+from app.utils.gl_utils import get_latest_purchase_price, get_latest_purchase_price_no_rounds
 
 
 
@@ -1552,44 +1552,29 @@ def sales_report():
                 actual_qty = item.quantity * conversion_qty
 
             # --- Get last purchase price ---
-            last_purchase = None
-            is_base_unit = True
-            if item.unit_id:
-            #     # Try to find exact unit purchase before sale date
-                last_purchase = (
-                    PurchaseOrderItem.query
-                    .filter(
-                        PurchaseOrderItem.product_id == product.id,
-                        PurchaseOrderItem.status == 1,
-                        PurchaseOrderItem.unit_id == item.unit_id,
-                        PurchaseOrderItem.created_at <= (end_date or datetime.utcnow())
-                    )
-                    .order_by(PurchaseOrderItem.created_at.desc())
-                    .first()
-                )
-            if not last_purchase:
-
-                is_base_unit=False
-            #     # Fallback: use base unit purchase and divide by conversion
-            #     base_purchase = (
+            # last_purchase = None
+            # is_base_unit = True
+            # if item.unit_id:
+            # #     # Try to find exact unit purchase before sale date
+            #     last_purchase = (
             #         PurchaseOrderItem.query
             #         .filter(
             #             PurchaseOrderItem.product_id == product.id,
             #             PurchaseOrderItem.status == 1,
-            #             PurchaseOrderItem.unit_id.is_(None),
+            #             PurchaseOrderItem.unit_id == item.unit_id,
             #             PurchaseOrderItem.created_at <= (end_date or datetime.utcnow())
             #         )
             #         .order_by(PurchaseOrderItem.created_at.desc())
             #         .first()
             #     )
-            last_purchase_price=get_latest_purchase_price(product.id,item.unit_id,end_date)
+            # if not last_purchase:
 
-            #     if base_purchase and conversion_qty > 0:
-            #         last_purchase_price = float(base_purchase.unit_price or 0) / conversion_qty
-            #     else:
-            #         last_purchase_price = 0
-            # else:
-            #     last_purchase_price = float(last_purchase.unit_price or 0)
+            #     is_base_unit=False
+
+            last_purchase_price, is_base_unit =get_latest_purchase_price_no_rounds(product.id,item.unit_id,end_date)
+            print(" last_purchase_price ",last_purchase_price)
+            print(" is_base_unit ",is_base_unit)
+
 
             unit_cost = round(last_purchase_price, 2) 
             unit_selling = float(item.unit_price or 0)
