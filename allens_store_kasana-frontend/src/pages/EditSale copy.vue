@@ -1,10 +1,11 @@
 <template>
   <div class="w-full min-h-screen bg-gray-50 px-6 py-6">
-    <!-- Page Header -->
-    <h1 class="text-3xl font-bold mb-6 text-gray-800 text-center">Sales Dashboard</h1>
+    <h1 class="text-3xl font-bold mb-6 text-gray-800 text-center">
+      {{ isEditMode ? 'Edit Sale #' + route.params.id : 'Create New Sale' }}
+    </h1>
 
-    <!-- --------- Sale Header --------- -->
-    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+  <!-- --------- Sale Header --------- -->
+  <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
       <!-- Sale Date -->
       <div>
         <label class="block font-semibold mb-1">Sale Date</label>
@@ -147,7 +148,9 @@
               </select>
             </td>
 
-
+            <!-- Prices & Quantity -->
+            <!-- <td class="p-3 border text-center">{{ formatPrice(item.retail_price) }}</td>
+            <td class="p-3 border text-center">{{ formatPrice(item.wholesale_price) }}</td> -->
             <!-- Retail Price -->
             <td class="p-3 border text-center" v-if="item.sale_type === 'retail'">
               {{ formatPrice(item.retail_price) }}
@@ -198,7 +201,6 @@
                 {{ saleItemsErrors[idx].unit_price }}
               </p>
             </td>
-            
 
             <td class="p-3 border text-center">{{ formatPrice(item.last_purchase_price) }}</td>
 
@@ -241,14 +243,13 @@
         Grand Total: <span class="text-indigo-600">{{ formatPrice(grandTotal) }}</span>
       </div>
     </div>
-
-    <!-- Save -->
+    <!-- Save Button -->
     <div class="mt-6 text-right">
       <button
         @click="saveSale"
         class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition transform hover:scale-105 text-lg"
       >
-        Save Sale
+        {{ isEditMode ? 'Update Sale' : 'Save Sale' }}
       </button>
     </div>
   </div>
@@ -256,8 +257,15 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import debounce from 'lodash.debounce'
 import api from '../api'
+
+// ---------- Routing ----------
+const route = useRoute()
+const router = useRouter()
+const isEditMode = ref(false)
+const saleId = ref(null)
 
 // ---------- Header ----------
 const saleHeader = ref({
@@ -273,11 +281,18 @@ const saleHeaderErrors = reactive({
   amount_paid: '',
   sale_date: ''
 })
+const updateSaleType = (item) => {
+  if (item.sale_type === 'retail') {
+    item.unit_price = item.retail_price || 0
+  } else {
+    item.unit_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
+}
 
 // ---------- State ----------
 const saleItems = ref([])
 const saleItemsErrors = ref([])
-
 const customers = ref([])
 const paymentAccounts = ref([])
 const selectedCustomerObj = ref(null)
@@ -290,7 +305,7 @@ const grandTotal = computed(() =>
   saleItems.value.reduce((sum, item) => sum + (item.total_price || 0), 0)
 )
 
-// ---------- Customer / Account ----------
+// ---------- Customer & Accounts ----------
 const fetchCustomers = async () => {
   loadingCustomers.value = true
   try {
@@ -336,12 +351,11 @@ const debouncedSearchProduct = debounce(async (query, idx) => {
     const res = await api.get('/inventory/products/search', { params: { name: query } })
     item.searchResults = res.data.map(p => ({
       id: p.id,
-      name: p.name +' : '+p.category_name,
+      name: p.name + ' : ' + p.category_name,
       stock_qty: p.quantity,
       retail_price: p.price || 0,
       wholesale_price: p.whole_price || 0,
-      last_purchase_price: p.last_purchase_price || 0,
-      // unit_price : p.whole_price || 0 
+      last_purchase_price: p.last_purchase_price || 0
     }))
   } finally {
     item.loading = false
@@ -362,7 +376,6 @@ const selectProduct = async (id, idx) => {
   item.unit_price = 0
   item.quantity = 0
   item.total_price = 0
-  item.searchResults = []
   item.units = []
   item.selectedUnitObj = null
   item.last_purchase_price = prod.last_purchase_price || 0
@@ -375,27 +388,11 @@ const selectProduct = async (id, idx) => {
       item.retail_price = item.units[0].retail_price ?? 0
       item.wholesale_price = item.units[0].wholesale_price ?? 0
       item.unit_price = item.units[0].retail_price ?? 0
-      item.conversion_quantity= item.units[0].conversion_quantity ?? 1
+      item.conversion_quantity = item.units[0].conversion_quantity ?? 1
     }
   } catch (err) {
     console.error('Failed to fetch units:', err)
   }
-}
-const recalculateQuantityRate = (item) => {
-  if (item.quantity_number > 0) {
-    item.unit_price = item.rate / item.quantity_number
-  } else {
-    item.unit_price = item.wholesale_price || 0
-  }
-  calculateTotal(item)
-}
-const recalculateUnitPrice = (item) => {
-  if (item.rate && item.rate > 0) {
-    item.unit_price = item.rate / (item.quantity_number || item.conversion_quantity || 1)
-  } else {
-    item.unit_price = item.wholesale_price || 0
-  }
-  calculateTotal(item)
 }
 
 const selectUnit = (unitId, idx) => {
@@ -406,17 +403,12 @@ const selectUnit = (unitId, idx) => {
   item.retail_price = selected.retail_price ?? 0
   item.wholesale_price = selected.wholesale_price ?? 0
   item.unit_price = selected.wholesale_price ?? 0
-  item.conversion_quantity= selected.conversion_quantity??1
-
+  item.conversion_quantity = selected.conversion_quantity ?? 1
   calculateTotal(item)
 }
-const updateSaleType = (item) => {
-  if (item.sale_type === 'retail') {
-    item.unit_price = item.retail_price || 0
-  } else {
-    item.unit_price = item.wholesale_price || 0
-  }
-  calculateTotal(item)
+
+const calculateTotal = (item) => {
+  item.total_price = (item.quantity || 0) * (item.unit_price || 0)
 }
 
 // ---------- Rows ----------
@@ -432,41 +424,15 @@ const addRow = () => {
     total_price: 0,
     selectedProductObj: null,
     selectedUnitObj: null,
-    sale_type: 'retail', // ✅ Default sale type
-
     units: [],
     searchResults: [],
-    rate: 0, // 🔹 newly added
-    quantity_number: 24, // ✅ newly added
-
+    rate: 0,
+    quantity_number: 24,
     loading: false,
-    conversion_quantity:1
+    conversion_quantity: 1
   })
   saleItemsErrors.value.push({ product_id: '', quantity: '', unit_id: '', unit_price: '' })
 }
-const removeRow = (idx) => {
-  saleItems.value.splice(idx, 1)
-  saleItemsErrors.value.splice(idx, 1)
-}
-const calculateTotal = (item) => {
-  item.total_price = (item.quantity || 0) * (item.unit_price || 0)
-}
-const validateQuantity = (item, idx) => {
-  if (item.quantity < 0) item.quantity = 0
-  if (item.quantity > item.stock_qty) item.quantity = item.stock_qty
-  calculateTotal(item)
-}
-
-// const recalculateUnitPrice = (item) => {
-//   if (item.rate && item.rate > 0) {
-//     // derive new unit price
-//     item.unit_price =  item.rate /item.conversion_quantity
-//   } else {
-//     // reset to default if cleared
-//     item.unit_price = item.wholesale_price || 0
-//   }
-//   calculateTotal(item)
-// }
 
 // ---------- Validation ----------
 const validateSale = () => {
@@ -479,7 +445,7 @@ const validateSale = () => {
     saleHeaderErrors.customer_id = 'Customer is required'
     valid = false
   }
-  if ( saleHeader.value.amount_paid >0  &&  !saleHeader.value.payment_account) {
+  if (saleHeader.value.amount_paid > 0 && !saleHeader.value.payment_account) {
     saleHeaderErrors.payment_account = 'Payment account is required'
     valid = false
   }
@@ -502,15 +468,108 @@ const validateSale = () => {
       valid = false
     }
   })
-
   return valid
 }
 
-// ---------- Save ----------
+// ---------- Load Existing Sale (for Edit) ----------
+const fetchSaleDetails = async (id) => {
+  try {
+    const res = await api.get(`/sales/${id}/edit`)
+    const sale = res.data.data  // note: if you use wrapped "data"
+
+    // populate header
+    saleHeader.value.sale_date = sale.sale_date
+    saleHeader.value.amount_paid = sale.total_paid || 0
+    saleHeader.value.memo = sale.memo || ''
+    saleHeader.value.customer_id = sale.customer_id
+    saleHeader.value.payment_account = sale.payment_account_id || ''
+
+    // populate dropdowns
+    selectedCustomerObj.value = customers.value.find(c => c.id === sale.customer_id)
+    selectedPaymentObj.value = paymentAccounts.value.find(a => a.id === sale.payment_account_id)
+
+    // populate items
+    saleItems.value = []
+    saleItemsErrors.value = []  // <--- Initialize errors array
+
+    for (const i of sale.items) {
+      const row = {
+        product_id: i.product_id,
+        product_name: i.product_name,
+        category_name: i.category_name || '',
+        stock_qty: i.stock_qty || 0,
+        retail_price: i.retail_price || 0,
+        wholesale_price: i.wholesale_price || 0,
+        unit_price: i.unit_price || 0,
+        quantity: i.quantity,
+        total_price: i.total_price,
+        selectedProductObj: { id: i.product_id, name: i.product_name },
+        selectedUnitObj: { id: i.unit_id, unit_name: i.unit_name },
+        units: [],
+        rate: 0,
+        quantity_number: 1,
+        conversion_quantity: 1
+      }
+
+      const resUnits = await api.get(`/inventory/products/${i.product_id}/units`)
+      row.units = resUnits.data || []
+      saleItems.value.push(row)
+      saleItemsErrors.value.push({ product_id: '', quantity: '', unit_id: '', unit_price: '' })  // <-- Add error object
+
+    }
+  } catch (err) {
+    alert('Failed to load sale details: ' + (err.response?.data?.error || err.message))
+  }
+}
+const validateQuantity = (item, idx) => {
+  if (!item.quantity || item.quantity <= 0) {
+    saleItemsErrors.value[idx].quantity = 'Quantity must be greater than 0'
+  } else {
+    saleItemsErrors.value[idx].quantity = ''
+  }
+  calculateTotal(item)
+}
+
+
+// // ---------- Save / Update ----------
+// const saveSale = async () => {
+//   if (!validateSale()) return
+
+//   const payload = {
+//     sale_date: saleHeader.value.sale_date,
+//     customer_id: saleHeader.value.customer_id,
+//     payment_account_id: saleHeader.value.payment_account,
+//     amount_paid: saleHeader.value.amount_paid,
+//     memo: saleHeader.value.memo,
+//     items: saleItems.value.map(i => ({
+//       product_id: i.product_id,
+//       unit_id: i.selectedUnitObj?.id,
+//       unit_price: i.unit_price,
+//       quantity: i.quantity,
+//       total_price: i.total_price
+//     }))
+//   }
+
+//   try {
+//     if (isEditMode.value) {
+//       await api.put(`/sales/${saleId.value}/edit`, payload)
+//       alert('✅ Sale updated successfully!')
+//     } else {
+//       const res = await api.post('/sales/', payload)
+//       alert(`✅ Sale created! ID: ${res.data.sale_id}`)
+//     }
+//     router.push('/sales') // redirect after save
+//   } catch (err) {
+//     alert(err.response?.data?.error || err.message)
+//   }
+// }
+
+// ---------- Save / Update ----------
 const saveSale = async () => {
   if (!validateSale()) return
 
   const payload = {
+    sale_id: isEditMode.value ? saleId.value : undefined, // include sale_id for update
     sale_date: saleHeader.value.sale_date,
     customer_id: saleHeader.value.customer_id,
     payment_account_id: saleHeader.value.payment_account,
@@ -526,26 +585,55 @@ const saveSale = async () => {
   }
 
   try {
-    const res = await api.post('/sales/', payload)
-    alert(`Sale saved! ID: ${res.data.sale_id}`)
+    if (isEditMode.value) {
+      // use POST to /sales/edit as per backend
+      const res = await api.post('/sales/edit', payload)
+      alert('✅ Sale updated successfully!')
+      router.push('/saleslist') // redirect after save
 
-    // Reset form
-    saleHeader.value = { sale_date: new Date().toISOString().slice(0, 10), amount_paid: 0, memo: '', payment_account: '', customer_id: '' }
-    selectedCustomerObj.value = null
-    selectedPaymentObj.value = null
-    saleItems.value = []
-    saleItemsErrors.value = []
-    addRow()
+    } else {
+      const res = await api.post('/sales/', payload)
+      alert(`✅ Sale created! ID: ${res.data.sale_id}`)
+    }
+    router.push('/saleslist') // redirect after save
   } catch (err) {
-    const errorMsg = err.response?.data?.error || err.message
-    alert(errorMsg)
+    console.error(err)
+    alert(err.response?.data?.error || err.message)
+ 
   }
 }
 
+// ---------- Utils ----------
+
+
+const recalculateQuantityRate = (item) => {
+  if (item.quantity_number > 0) {
+    item.unit_price = item.rate / item.quantity_number
+  } else {
+    item.unit_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
+}
+const recalculateUnitPrice = (item) => {
+  if (item.rate && item.rate > 0) {
+    item.unit_price = item.rate / (item.quantity_number || item.conversion_quantity || 1)
+  } else {
+    item.unit_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
+}
+
+
 // ---------- Lifecycle ----------
-onMounted(() => {
-  fetchCustomers()
-  fetchAccounts()
-  addRow()
+onMounted(async () => {
+  await fetchCustomers()
+  await fetchAccounts()
+  saleId.value = route.params.id
+  if (saleId.value) {
+    isEditMode.value = true
+    await fetchSaleDetails(saleId.value)
+  } else {
+    addRow()
+  }
 })
 </script>

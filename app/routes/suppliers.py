@@ -224,7 +224,7 @@ def get_purchase_order_fill_details(id):
         )
 
         # Get all units for this product
-        product_units = ProductUnit.query.filter_by(product_id=product.id, status=1).all()
+        product_units = ProductUnit.query.filter_by(product_id=product.id).all()
         units_list = [
             {
                 "id": u.id,
@@ -262,6 +262,7 @@ def get_purchase_order_fill_details(id):
             "unit_id": item.unit_id,
             "unit_name": unit.unit_name if unit else None,
             "units": units_list,
+
             "quantity": item.quantity,
             "cost_price": item.unit_price,
             "wholesale_price": unit.wholesale_price if unit else 0,

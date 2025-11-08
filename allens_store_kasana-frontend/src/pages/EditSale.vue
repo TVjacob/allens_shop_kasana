@@ -4,8 +4,8 @@
       {{ isEditMode ? 'Edit Sale #' + route.params.id : 'Create New Sale' }}
     </h1>
 
-  <!-- --------- Sale Header --------- -->
-  <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+    <!-- Sale Header -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
       <!-- Sale Date -->
       <div>
         <label class="block font-semibold mb-1">Sale Date</label>
@@ -71,7 +71,7 @@
       <p v-if="saleHeaderErrors.payment_account" class="text-red-600 text-sm mt-1">{{ saleHeaderErrors.payment_account }}</p>
     </div>
 
-    <!-- --------- Sale Items Table --------- -->
+    <!-- Sale Items Table -->
     <div class="overflow-x-auto bg-white rounded-lg shadow border border-gray-200">
       <table class="w-full table-auto border-collapse">
         <thead class="bg-gray-100 text-base">
@@ -79,11 +79,7 @@
             <th class="p-3 border min-w-[220px]">Product</th>
             <th class="p-3 border min-w-[80px] text-center">Stock</th>
             <th class="p-3 border min-w-[140px]">Unit</th>
-            <th class="p-3 border min-w-[140px]">Sale Type </th>
-            <th class="p-3 border min-w-[100px] text-center">Retail</th>
-            <th class="p-3 border min-w-[100px] text-center">Wholesale</th>
-            <th class="p-3 border min-w-[120px] text-center">Divide by Rate</th>
-            <th class="p-3 border min-w-[120px] text-center">How Many</th>
+            <th class="p-3 border min-w-[140px]">Sale Type</th>
             <th class="p-3 border min-w-[120px] text-center">Selling Price</th>
             <th class="p-3 border min-w-[120px] text-center">Cost Price</th>
             <th class="p-3 border min-w-[120px] text-center">Quantity</th>
@@ -102,7 +98,7 @@
                 item-value="id"
                 label="Product"
                 variant="outlined"
-                dense="false"
+                dense
                 clearable
                 class="w-full text-lg"
                 hide-details
@@ -110,9 +106,6 @@
                 @update:search="val => debouncedSearchProduct(val, idx)"
                 @update:model-value="id => selectProduct(id, idx)"
               ></v-autocomplete>
-              <span v-if="item.selectedProductObj" class="block text-gray-800 mt-1 font-semibold text-lg">
-                Selected: {{ item.selectedProductObj.name }}
-              </span>
             </td>
 
             <!-- Stock -->
@@ -132,10 +125,8 @@
                 class="text-base w-full"
                 @update:model-value="val => selectUnit(val, idx)"
               ></v-autocomplete>
-              <p v-if="saleItemsErrors[idx]?.unit_id" class="text-red-600 text-sm mt-1">
-                {{ saleItemsErrors[idx].unit_id }}
-              </p>
             </td>
+
             <!-- Sale Type -->
             <td class="p-3 border text-center">
               <select
@@ -143,81 +134,46 @@
                 @change="updateSaleType(item)"
                 class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
               >
-                <option value="retail">Retail</option>
                 <option value="wholesale">Wholesale</option>
+                <option value="retail">Retail</option>
               </select>
             </td>
 
-            <!-- Prices & Quantity -->
-            <!-- <td class="p-3 border text-center">{{ formatPrice(item.retail_price) }}</td>
-            <td class="p-3 border text-center">{{ formatPrice(item.wholesale_price) }}</td> -->
-            <!-- Retail Price -->
-            <td class="p-3 border text-center" v-if="item.sale_type === 'retail'">
-              {{ formatPrice(item.retail_price) }}
-            </td>
-            <td class="p-3 border text-center" v-else></td>
-
-            <!-- Wholesale Price -->
-            <td class="p-3 border text-center" v-if="item.sale_type === 'wholesale'">
-              {{ formatPrice(item.wholesale_price) }}
-            </td>
-            <td class="p-3 border text-center" v-else></td>
-
-
-            <td class="p-3 border" v-if="Number(item.conversion_quantity) <= 1">
-              <input
-                type="number"
-                v-model.number="item.rate"
-                min="0"
-                placeholder="0"
-                @input="recalculateUnitPrice(item)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-              />
-            </td>
-            <td class="p-3 border" v-else></td>
-
-
-            <td class="p-3 border"  v-if="Number(item.conversion_quantity) <= 1">
-              <input
-                type="number"
-                v-model.number="item.quantity_number"
-                min="1"
-                placeholder="1"
-                @input="recalculateQuantityRate(item)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-              />
-            </td>
-            <td class="p-3 border" v-else></td>
-
-
-            <td class="p-3 border">
+            <!-- Selling Price -->
+            <td class="p-3 border text-center">
               <input
                 type="number"
                 v-model.number="item.unit_price"
                 @input="calculateTotal(item)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+                class="w-full border border-gray-300 rounded-xl p-2 text-base text-right"
               />
-              <p v-if="saleItemsErrors[idx]?.unit_price" class="text-red-600 text-sm mt-1">
-                {{ saleItemsErrors[idx].unit_price }}
-              </p>
             </td>
 
+            <!-- Cost Price -->
             <td class="p-3 border text-center">{{ formatPrice(item.last_purchase_price) }}</td>
 
-            <td class="p-3 border">
+            <!-- Quantity -->
+            <td class="p-3 border text-center">
               <input
                 type="number"
                 v-model.number="item.quantity"
-                @input="validateQuantity(item, idx)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
+                min="0"
+                @input="calculateTotal(item)"
+                class="w-full border border-gray-300 rounded-xl p-2 text-base text-right"
               />
-              <p v-if="saleItemsErrors[idx]?.quantity" class="text-red-600 text-sm mt-1">
-                {{ saleItemsErrors[idx].quantity }}
-              </p>
             </td>
 
-            <td class="p-3 border text-right font-bold text-indigo-700">{{ formatPrice(item.total_price) }}</td>
+            <!-- Total -->
+            <td class="p-3 border text-right">
+              <input
+                type="number"
+                v-model.number="item.total_price"
+                @input="recalculateUnitPriceFromTotal(item)"
+                class="w-full border border-gray-300 rounded-xl p-2 text-base text-right font-bold text-indigo-700"
+              />
+            </td>
 
+            <!-- Actions -->
             <td class="p-3 border text-center">
               <button
                 @click="removeRow(idx)"
@@ -243,6 +199,7 @@
         Grand Total: <span class="text-indigo-600">{{ formatPrice(grandTotal) }}</span>
       </div>
     </div>
+
     <!-- Save Button -->
     <div class="mt-6 text-right">
       <button
@@ -261,14 +218,13 @@ import { useRoute, useRouter } from 'vue-router'
 import debounce from 'lodash.debounce'
 import api from '../api'
 
-// ---------- Routing ----------
 const route = useRoute()
 const router = useRouter()
 const isEditMode = ref(false)
 const saleId = ref(null)
 
 // ---------- Header ----------
-const saleHeader = ref({
+const saleHeader = reactive({
   sale_date: new Date().toISOString().slice(0, 10),
   amount_paid: 0,
   memo: '',
@@ -281,14 +237,6 @@ const saleHeaderErrors = reactive({
   amount_paid: '',
   sale_date: ''
 })
-const updateSaleType = (item) => {
-  if (item.sale_type === 'retail') {
-    item.unit_price = item.retail_price || 0
-  } else {
-    item.unit_price = item.wholesale_price || 0
-  }
-  calculateTotal(item)
-}
 
 // ---------- State ----------
 const saleItems = ref([])
@@ -301,24 +249,18 @@ const loadingCustomers = ref(false)
 const loadingAccounts = ref(false)
 
 // ---------- Computed ----------
-const grandTotal = computed(() =>
-  saleItems.value.reduce((sum, item) => sum + (item.total_price || 0), 0)
-)
+const grandTotal = computed(() => saleItems.value.reduce((sum, item) => sum + (item.total_price || 0), 0))
 
-// ---------- Customer & Accounts ----------
+// ---------- Utils ----------
+const formatPrice = value => (value == null ? '0' : new Intl.NumberFormat('en-UG').format(value))
+
+// ---------- Fetch Data ----------
 const fetchCustomers = async () => {
   loadingCustomers.value = true
   try {
     const res = await api.get('/customer/')
     customers.value = res.data
-  } finally {
-    loadingCustomers.value = false
-  }
-}
-const selectCustomerById = (id) => {
-  const cust = customers.value.find(c => c.id === id)
-  selectedCustomerObj.value = cust || null
-  saleHeader.value.customer_id = cust ? cust.id : ''
+  } finally { loadingCustomers.value = false }
 }
 
 const fetchAccounts = async () => {
@@ -326,26 +268,25 @@ const fetchAccounts = async () => {
   try {
     const res = await api.get('/accounts/?type=asset')
     paymentAccounts.value = res.data
-  } finally {
-    loadingAccounts.value = false
-  }
+  } finally { loadingAccounts.value = false }
 }
-const selectPaymentAccountById = (id) => {
+
+const selectCustomerById = id => {
+  const cust = customers.value.find(c => c.id === id)
+  selectedCustomerObj.value = cust || null
+  saleHeader.customer_id = cust?.id || ''
+}
+
+const selectPaymentAccountById = id => {
   const acc = paymentAccounts.value.find(a => a.id === id)
   selectedPaymentObj.value = acc || null
-  saleHeader.value.payment_account = acc ? acc.id : ''
+  saleHeader.payment_account = acc?.id || ''
 }
 
-// ---------- Utils ----------
-const formatPrice = (value) => (value == null ? '0' : new Intl.NumberFormat('en-UG').format(value))
-
-// ---------- Product Logic ----------
+// ---------- Products ----------
 const debouncedSearchProduct = debounce(async (query, idx) => {
   const item = saleItems.value[idx]
-  if (!query?.trim()) {
-    item.searchResults = []
-    return
-  }
+  if (!query?.trim()) { item.searchResults = []; return }
   item.loading = true
   try {
     const res = await api.get('/inventory/products/search', { params: { name: query } })
@@ -357,22 +298,17 @@ const debouncedSearchProduct = debounce(async (query, idx) => {
       wholesale_price: p.whole_price || 0,
       last_purchase_price: p.last_purchase_price || 0
     }))
-  } finally {
-    item.loading = false
-  }
+  } finally { item.loading = false }
 }, 400)
 
 const selectProduct = async (id, idx) => {
   const item = saleItems.value[idx]
   const prod = item.searchResults.find(p => p.id === id)
   if (!prod) return
-
   item.selectedProductObj = prod
   item.product_id = prod.id
   item.product_name = prod.name
   item.stock_qty = prod.stock_qty
-  item.retail_price = 0
-  item.wholesale_price = 0
   item.unit_price = 0
   item.quantity = 0
   item.total_price = 0
@@ -383,16 +319,14 @@ const selectProduct = async (id, idx) => {
   try {
     const res = await api.get(`/inventory/products/${prod.id}/units`)
     item.units = res.data || []
-    if (item.units.length > 0) {
+    if (item.units.length) {
       item.selectedUnitObj = item.units[0]
       item.retail_price = item.units[0].retail_price ?? 0
       item.wholesale_price = item.units[0].wholesale_price ?? 0
       item.unit_price = item.units[0].retail_price ?? 0
       item.conversion_quantity = item.units[0].conversion_quantity ?? 1
     }
-  } catch (err) {
-    console.error('Failed to fetch units:', err)
-  }
+  } catch (err) { console.error(err) }
 }
 
 const selectUnit = (unitId, idx) => {
@@ -402,37 +336,47 @@ const selectUnit = (unitId, idx) => {
   item.selectedUnitObj = selected
   item.retail_price = selected.retail_price ?? 0
   item.wholesale_price = selected.wholesale_price ?? 0
-  item.unit_price = selected.wholesale_price ?? 0
+  item.unit_price = item.wholesale_price ?? 0
   item.conversion_quantity = selected.conversion_quantity ?? 1
   calculateTotal(item)
 }
 
-const calculateTotal = (item) => {
-  item.total_price = (item.quantity || 0) * (item.unit_price || 0)
+// ---------- Calculations ----------
+const updateSaleType = item => {
+  item.unit_price = item.sale_type === 'wholesale' ?  item.wholesale_price:item.retail_price 
+  calculateTotal(item)
+}
+
+const calculateTotal = item => item.total_price = (item.quantity || 0) * (item.unit_price || 0)
+
+const recalculateUnitPriceFromTotal = item => {
+  if (item.quantity && item.quantity > 0) item.unit_price = item.total_price / item.quantity
+  calculateTotal(item)
 }
 
 // ---------- Rows ----------
-const addRow = () => {
-  saleItems.value.push({
-    product_id: null,
-    product_name: '',
-    stock_qty: 0,
-    retail_price: 0,
-    wholesale_price: 0,
-    unit_price: 0,
-    quantity: 0,
-    total_price: 0,
-    selectedProductObj: null,
-    selectedUnitObj: null,
-    units: [],
-    searchResults: [],
-    rate: 0,
-    quantity_number: 24,
-    loading: false,
-    conversion_quantity: 1
-  })
-  saleItemsErrors.value.push({ product_id: '', quantity: '', unit_id: '', unit_price: '' })
-}
+const addRow = () => saleItems.value.push({
+  product_id: null,
+  product_name: '',
+  stock_qty: 0,
+  retail_price: 0,
+  wholesale_price: 0,
+  unit_price: 0,
+  quantity: 0,
+  total_price: 0,
+  selectedProductObj: null,
+  selectedUnitObj: null,
+  units: [],
+  searchResults: [],
+  loading: false,
+  conversion_quantity: 1,
+  // sale_type: 'retail',
+  sale_type: 'wholesale', // ✅ set default to wholesale
+
+  last_purchase_price: 0
+})
+
+const removeRow = idx => saleItems.value.splice(idx, 1)
 
 // ---------- Validation ----------
 const validateSale = () => {
@@ -441,140 +385,79 @@ const validateSale = () => {
   saleHeaderErrors.payment_account = ''
   saleItemsErrors.value = saleItems.value.map(() => ({ product_id: '', quantity: '', unit_id: '', unit_price: '' }))
 
-  if (!saleHeader.value.customer_id) {
-    saleHeaderErrors.customer_id = 'Customer is required'
-    valid = false
-  }
-  if (saleHeader.value.amount_paid > 0 && !saleHeader.value.payment_account) {
-    saleHeaderErrors.payment_account = 'Payment account is required'
-    valid = false
-  }
+  if (!saleHeader.customer_id) { saleHeaderErrors.customer_id = 'Customer is required'; valid = false }
+  if (saleHeader.amount_paid > 0 && !saleHeader.payment_account) { saleHeaderErrors.payment_account = 'Payment account is required'; valid = false }
 
   saleItems.value.forEach((item, idx) => {
-    if (!item.product_id) {
-      saleItemsErrors.value[idx].product_id = 'Select a product'
-      valid = false
-    }
-    if (!item.selectedUnitObj?.id) {
-      saleItemsErrors.value[idx].unit_id = 'Select a unit'
-      valid = false
-    }
-    if (!item.quantity || item.quantity <= 0) {
-      saleItemsErrors.value[idx].quantity = 'Quantity must be > 0'
-      valid = false
-    }
-    if (!item.unit_price || item.unit_price <= 0) {
-      saleItemsErrors.value[idx].unit_price = 'Unit price must be > 0'
-      valid = false
-    }
+    if (!item.product_id) { saleItemsErrors.value[idx].product_id = 'Select a product'; valid = false }
+    if (!item.selectedUnitObj?.id) { saleItemsErrors.value[idx].unit_id = 'Select a unit'; valid = false }
+    if (!item.quantity || item.quantity <= 0) { saleItemsErrors.value[idx].quantity = 'Quantity must be > 0'; valid = false }
+    if (!item.unit_price || item.unit_price <= 0) { saleItemsErrors.value[idx].unit_price = 'Unit price must be > 0'; valid = false }
   })
+
   return valid
 }
 
-// ---------- Load Existing Sale (for Edit) ----------
-const fetchSaleDetails = async (id) => {
+// ---------- Load Existing Sale ----------
+const fetchSaleDetails = async id => {
   try {
     const res = await api.get(`/sales/${id}/edit`)
-    const sale = res.data.data  // note: if you use wrapped "data"
+    const sale = res.data.data
 
-    // populate header
-    saleHeader.value.sale_date = sale.sale_date
-    saleHeader.value.amount_paid = sale.total_paid || 0
-    saleHeader.value.memo = sale.memo || ''
-    saleHeader.value.customer_id = sale.customer_id
-    saleHeader.value.payment_account = sale.payment_account_id || ''
+    // header
+    saleHeader.sale_date = sale.sale_date
+    saleHeader.amount_paid = sale.total_paid || 0
+    saleHeader.memo = sale.memo || ''
+    saleHeader.customer_id = sale.customer_id
+    saleHeader.payment_account = sale.payment_account_id || ''
+    selectedCustomerObj.value = customers.value.find(c => c.id === sale.customer_id) || null
+    selectedPaymentObj.value = paymentAccounts.value.find(a => a.id === sale.payment_account_id) || null
 
-    // populate dropdowns
-    selectedCustomerObj.value = customers.value.find(c => c.id === sale.customer_id)
-    selectedPaymentObj.value = paymentAccounts.value.find(a => a.id === sale.payment_account_id)
-
-    // populate items
+    // items
     saleItems.value = []
-    saleItemsErrors.value = []  // <--- Initialize errors array
+    saleItemsErrors.value = []
 
     for (const i of sale.items) {
-      const row = {
+      const resUnits = await api.get(`/inventory/products/${i.product_id}/units`)
+      const units = resUnits.data || []
+      const selectedUnit = units.find(u => u.id === i.unit_id) || units[0] || null
+
+      saleItems.value.push({
         product_id: i.product_id,
         product_name: i.product_name,
         category_name: i.category_name || '',
         stock_qty: i.stock_qty || 0,
-        retail_price: i.retail_price || 0,
-        wholesale_price: i.wholesale_price || 0,
-        unit_price: i.unit_price || 0,
+        retail_price: selectedUnit?.retail_price ?? i.retail_price ?? 0,
+        wholesale_price: selectedUnit?.wholesale_price ?? i.wholesale_price ?? 0,
+        unit_price: i.unit_price,
         quantity: i.quantity,
         total_price: i.total_price,
         selectedProductObj: { id: i.product_id, name: i.product_name },
-        selectedUnitObj: { id: i.unit_id, unit_name: i.unit_name },
-        units: [],
-        rate: 0,
-        quantity_number: 1,
-        conversion_quantity: 1
-      }
+        selectedUnitObj: selectedUnit,
+        units: units,
+        conversion_quantity: selectedUnit?.conversion_quantity ?? 1,
+        sale_type: i.sale_type || 'wholesale',
+        searchResults: [{ id: i.product_id, name: i.product_name + ' : ' + (i.category_name || '') }],
+        last_purchase_price: i.last_purchase_price || 0,
+        loading: false
+      })
 
-      const resUnits = await api.get(`/inventory/products/${i.product_id}/units`)
-      row.units = resUnits.data || []
-      saleItems.value.push(row)
-      saleItemsErrors.value.push({ product_id: '', quantity: '', unit_id: '', unit_price: '' })  // <-- Add error object
-
+      saleItemsErrors.value.push({ product_id: '', quantity: '', unit_id: '', unit_price: '' })
     }
-  } catch (err) {
-    alert('Failed to load sale details: ' + (err.response?.data?.error || err.message))
-  }
-}
-const validateQuantity = (item, idx) => {
-  if (!item.quantity || item.quantity <= 0) {
-    saleItemsErrors.value[idx].quantity = 'Quantity must be greater than 0'
-  } else {
-    saleItemsErrors.value[idx].quantity = ''
-  }
-  calculateTotal(item)
+  } catch (err) { alert('Failed to load sale details: ' + (err.response?.data?.error || err.message)) }
 }
 
-
-// // ---------- Save / Update ----------
-// const saveSale = async () => {
-//   if (!validateSale()) return
-
-//   const payload = {
-//     sale_date: saleHeader.value.sale_date,
-//     customer_id: saleHeader.value.customer_id,
-//     payment_account_id: saleHeader.value.payment_account,
-//     amount_paid: saleHeader.value.amount_paid,
-//     memo: saleHeader.value.memo,
-//     items: saleItems.value.map(i => ({
-//       product_id: i.product_id,
-//       unit_id: i.selectedUnitObj?.id,
-//       unit_price: i.unit_price,
-//       quantity: i.quantity,
-//       total_price: i.total_price
-//     }))
-//   }
-
-//   try {
-//     if (isEditMode.value) {
-//       await api.put(`/sales/${saleId.value}/edit`, payload)
-//       alert('✅ Sale updated successfully!')
-//     } else {
-//       const res = await api.post('/sales/', payload)
-//       alert(`✅ Sale created! ID: ${res.data.sale_id}`)
-//     }
-//     router.push('/sales') // redirect after save
-//   } catch (err) {
-//     alert(err.response?.data?.error || err.message)
-//   }
-// }
-
-// ---------- Save / Update ----------
+// ---------- Save ----------
 const saveSale = async () => {
   if (!validateSale()) return
 
   const payload = {
-    sale_id: isEditMode.value ? saleId.value : undefined, // include sale_id for update
-    sale_date: saleHeader.value.sale_date,
-    customer_id: saleHeader.value.customer_id,
-    payment_account_id: saleHeader.value.payment_account,
-    amount_paid: saleHeader.value.amount_paid,
-    memo: saleHeader.value.memo,
+    sale_id: isEditMode.value ? saleId.value : undefined,
+    sale_date: saleHeader.sale_date,
+    customer_id: saleHeader.customer_id,
+    payment_account_id: saleHeader.payment_account,
+    amount_paid: saleHeader.amount_paid,
+    memo: saleHeader.memo,
     items: saleItems.value.map(i => ({
       product_id: i.product_id,
       unit_id: i.selectedUnitObj?.id,
@@ -586,54 +469,22 @@ const saveSale = async () => {
 
   try {
     if (isEditMode.value) {
-      // use POST to /sales/edit as per backend
-      const res = await api.post('/sales/edit', payload)
+      await api.post('/sales/edit', payload)
       alert('✅ Sale updated successfully!')
-      router.push('/saleslist') // redirect after save
-
     } else {
       const res = await api.post('/sales/', payload)
       alert(`✅ Sale created! ID: ${res.data.sale_id}`)
     }
-    router.push('/saleslist') // redirect after save
-  } catch (err) {
-    console.error(err)
-    alert(err.response?.data?.error || err.message)
- 
-  }
+    router.push('/saleslist')
+  } catch (err) { alert(err.response?.data?.error || err.message) }
 }
-
-// ---------- Utils ----------
-
-
-const recalculateQuantityRate = (item) => {
-  if (item.quantity_number > 0) {
-    item.unit_price = item.rate / item.quantity_number
-  } else {
-    item.unit_price = item.wholesale_price || 0
-  }
-  calculateTotal(item)
-}
-const recalculateUnitPrice = (item) => {
-  if (item.rate && item.rate > 0) {
-    item.unit_price = item.rate / (item.quantity_number || item.conversion_quantity || 1)
-  } else {
-    item.unit_price = item.wholesale_price || 0
-  }
-  calculateTotal(item)
-}
-
 
 // ---------- Lifecycle ----------
 onMounted(async () => {
   await fetchCustomers()
   await fetchAccounts()
   saleId.value = route.params.id
-  if (saleId.value) {
-    isEditMode.value = true
-    await fetchSaleDetails(saleId.value)
-  } else {
-    addRow()
-  }
+  if (saleId.value) { isEditMode.value = true; await fetchSaleDetails(saleId.value) }
+  else addRow()
 })
 </script>

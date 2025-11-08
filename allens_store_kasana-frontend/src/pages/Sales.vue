@@ -78,153 +78,122 @@
             <th class="p-3 border min-w-[220px]">Product</th>
             <th class="p-3 border min-w-[80px] text-center">Stock</th>
             <th class="p-3 border min-w-[140px]">Unit</th>
-            <th class="p-3 border min-w-[140px]">Sale Type </th>
-            <th class="p-3 border min-w-[100px] text-center">Retail</th>
-            <th class="p-3 border min-w-[100px] text-center">Wholesale</th>
-            <th class="p-3 border min-w-[120px] text-center">Divide by Rate</th>
-            <th class="p-3 border min-w-[120px] text-center">How Many</th>
+            <th class="p-3 border min-w-[140px]">Sale Type</th>
             <th class="p-3 border min-w-[120px] text-center">Selling Price</th>
             <th class="p-3 border min-w-[120px] text-center">Cost Price</th>
             <th class="p-3 border min-w-[120px] text-center">Quantity</th>
             <th class="p-3 border min-w-[120px] text-center">Total</th>
             <th class="p-3 border min-w-[100px] text-center">Actions</th>
           </tr>
+
         </thead>
         <tbody class="text-base">
           <tr v-for="(item, idx) in saleItems" :key="idx" class="hover:bg-gray-50 transition">
-            <!-- Product -->
-            <td class="p-3 border min-w-[220px]">
-              <v-autocomplete
-                v-model="item.selectedProductObj"
-                :items="item.searchResults"
-                item-title="name"
-                item-value="id"
-                label="Product"
-                variant="outlined"
-                dense="false"
-                clearable
-                class="w-full text-lg"
-                hide-details
-                :loading="item.loading"
-                @update:search="val => debouncedSearchProduct(val, idx)"
-                @update:model-value="id => selectProduct(id, idx)"
-              ></v-autocomplete>
-              <span v-if="item.selectedProductObj" class="block text-gray-800 mt-1 font-semibold text-lg">
-                Selected: {{ item.selectedProductObj.name }}
-              </span>
-            </td>
+  <!-- Product -->
+  <td class="p-3 border min-w-[220px]">
+    <v-autocomplete
+      v-model="item.selectedProductObj"
+      :items="item.searchResults"
+      item-title="name"
+      item-value="id"
+      label="Product"
+      variant="outlined"
+      dense
+      clearable
+      class="w-full text-lg"
+      hide-details
+      :loading="item.loading"
+      @update:search="val => debouncedSearchProduct(val, idx)"
+      @update:model-value="id => selectProduct(id, idx)"
+    ></v-autocomplete>
+  </td>
 
-            <!-- Stock -->
-            <td class="p-3 border text-center">{{ item.stock_qty }}</td>
+  <!-- Stock -->
+  <td class="p-3 border text-center">{{ item.stock_qty }}</td>
 
-            <!-- Unit -->
-            <td class="p-3 border min-w-[140px]">
-              <v-autocomplete
-                v-if="item.units && item.units.length"
-                v-model="item.selectedUnitObj"
-                :items="item.units"
-                item-title="unit_name"
-                item-value="id"
-                label="Select Unit"
-                variant="outlined"
-                hide-details
-                class="text-base w-full"
-                @update:model-value="val => selectUnit(val, idx)"
-              ></v-autocomplete>
-              <p v-if="saleItemsErrors[idx]?.unit_id" class="text-red-600 text-sm mt-1">
-                {{ saleItemsErrors[idx].unit_id }}
-              </p>
-            </td>
-            <!-- Sale Type -->
-            <td class="p-3 border text-center">
-              <select
-                v-model="item.sale_type"
-                @change="updateSaleType(item)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-              >
-                <option value="retail">Retail</option>
-                <option value="wholesale">Wholesale</option>
-              </select>
-            </td>
+  <!-- Unit -->
+  <td class="p-3 border min-w-[140px]">
+    <v-autocomplete
+      v-if="item.units && item.units.length"
+      v-model="item.selectedUnitObj"
+      :items="item.units"
+      item-title="unit_name"
+      item-value="id"
+      label="Select Unit"
+      variant="outlined"
+      hide-details
+      class="text-base w-full"
+      @update:model-value="val => selectUnit(val, idx)"
+    ></v-autocomplete>
+  </td>
 
+  <!-- Sale Type (default wholesale) -->
+  <!-- <td class="p-3 border text-center">
+    <select
+      v-model="item.sale_type"
+      class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+    >
+      <option value="wholesale">Wholesale</option>
+      <option value="retail">Retail</option>
+    </select>
+  </td> -->
+<!-- Sale Type -->
+<td class="p-3 border text-center">
+  <select
+    v-model="item.sale_type"
+    @change="updateSaleType(item)"
+    class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+  >
+    <option value="wholesale">Wholesale</option>
+    <option value="retail">Retail</option>
+  </select>
+</td>
 
-            <!-- Retail Price -->
-            <td class="p-3 border text-center" v-if="item.sale_type === 'retail'">
-              {{ formatPrice(item.retail_price) }}
-            </td>
-            <td class="p-3 border text-center" v-else></td>
+  <!-- Selling Price (editable) -->
+  <td class="p-3 border text-center">
+    <input
+      type="number"
+      v-model.number="item.unit_price"
+      @input="calculateTotal(item)"
+      class="w-full border border-gray-300 rounded-xl p-2 text-base text-right"
+    />
+  </td>
 
-            <!-- Wholesale Price -->
-            <td class="p-3 border text-center" v-if="item.sale_type === 'wholesale'">
-              {{ formatPrice(item.wholesale_price) }}
-            </td>
-            <td class="p-3 border text-center" v-else></td>
+  <!-- Cost Price -->
+  <td class="p-3 border text-center">{{ formatPrice(item.last_purchase_price) }}</td>
 
+  <!-- Quantity (editable) -->
+  <td class="p-3 border text-center">
+    <input
+      type="number"
+      v-model.number="item.quantity"
+      min="0"
+      @input="calculateTotal(item)"
+      class="w-full border border-gray-300 rounded-xl p-2 text-base text-right"
+    />
+  </td>
 
-            <td class="p-3 border" v-if="Number(item.conversion_quantity) <= 1">
-              <input
-                type="number"
-                v-model.number="item.rate"
-                min="0"
-                placeholder="0"
-                @input="recalculateUnitPrice(item)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-              />
-            </td>
-            <td class="p-3 border" v-else></td>
+  <!-- Total (editable) -->
+  <td class="p-3 border text-right">
+    <input
+      type="number"
+      v-model.number="item.total_price"
+      @input="recalculateUnitPriceFromTotal(item)"
+      class="w-full border border-gray-300 rounded-xl p-2 text-base text-right font-bold text-indigo-700"
+    />
+  </td>
 
+  <!-- Actions -->
+  <td class="p-3 border text-center">
+    <button
+      @click="removeRow(idx)"
+      class="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition transform hover:scale-105"
+    >
+      ✕
+    </button>
+  </td>
+</tr>
 
-            <td class="p-3 border"  v-if="Number(item.conversion_quantity) <= 1">
-              <input
-                type="number"
-                v-model.number="item.quantity_number"
-                min="1"
-                placeholder="1"
-                @input="recalculateQuantityRate(item)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-              />
-            </td>
-            <td class="p-3 border" v-else></td>
-
-
-            <td class="p-3 border">
-              <input
-                type="number"
-                v-model.number="item.unit_price"
-                @input="calculateTotal(item)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
-              />
-              <p v-if="saleItemsErrors[idx]?.unit_price" class="text-red-600 text-sm mt-1">
-                {{ saleItemsErrors[idx].unit_price }}
-              </p>
-            </td>
-            
-
-            <td class="p-3 border text-center">{{ formatPrice(item.last_purchase_price) }}</td>
-
-            <td class="p-3 border">
-              <input
-                type="number"
-                v-model.number="item.quantity"
-                @input="validateQuantity(item, idx)"
-                class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
-              />
-              <p v-if="saleItemsErrors[idx]?.quantity" class="text-red-600 text-sm mt-1">
-                {{ saleItemsErrors[idx].quantity }}
-              </p>
-            </td>
-
-            <td class="p-3 border text-right font-bold text-indigo-700">{{ formatPrice(item.total_price) }}</td>
-
-            <td class="p-3 border text-center">
-              <button
-                @click="removeRow(idx)"
-                class="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition transform hover:scale-105"
-              >
-                ✕
-              </button>
-            </td>
-          </tr>
         </tbody>
       </table>
     </div>
@@ -410,47 +379,93 @@ const selectUnit = (unitId, idx) => {
 
   calculateTotal(item)
 }
+// const updateSaleType = (item) => {
+//   if (item.sale_type === 'retail') {
+//     item.unit_price = item.retail_price || 0
+//   } else {
+//     item.unit_price = item.wholesale_price || 0
+//   }
+//   calculateTotal(item)
+// }
+
 const updateSaleType = (item) => {
-  if (item.sale_type === 'retail') {
-    item.unit_price = item.retail_price || 0
-  } else {
+  // If wholesale, default to wholesale price
+  if (item.sale_type === 'wholesale') {
     item.unit_price = item.wholesale_price || 0
+  } 
+  // If retail, default to retail price
+  else if (item.sale_type === 'retail') {
+    item.unit_price = item.retail_price || 0
   }
+
   calculateTotal(item)
 }
+const recalculateUnitPriceFromTotal = (item) => {
+  if (item.quantity > 0) {
+    item.unit_price = (item.total_price || 0) / item.quantity
+  }
+}
+
+
 
 // ---------- Rows ----------
+// const addRow = () => {
+//   saleItems.value.push({
+//     product_id: null,
+//     product_name: '',
+//     stock_qty: 0,
+//     retail_price: 0,
+//     wholesale_price: 0,
+//     unit_price: 0,
+//     quantity: 0,
+//     total_price: 0,
+//     selectedProductObj: null,
+//     selectedUnitObj: null,
+//     sale_type: 'retail', // ✅ Default sale type
+
+//     units: [],
+//     searchResults: [],
+//     rate: 0, // 🔹 newly added
+//     quantity_number: 24, // ✅ newly added
+
+//     loading: false,
+//     conversion_quantity:1
+//   })
+//   saleItemsErrors.value.push({ product_id: '', quantity: '', unit_id: '', unit_price: '' })
+// }
+
 const addRow = () => {
   saleItems.value.push({
     product_id: null,
     product_name: '',
     stock_qty: 0,
-    retail_price: 0,
-    wholesale_price: 0,
     unit_price: 0,
     quantity: 0,
     total_price: 0,
     selectedProductObj: null,
     selectedUnitObj: null,
-    sale_type: 'retail', // ✅ Default sale type
-
+    sale_type: 'wholesale', // default to wholesale
     units: [],
     searchResults: [],
-    rate: 0, // 🔹 newly added
-    quantity_number: 24, // ✅ newly added
-
     loading: false,
-    conversion_quantity:1
+    last_purchase_price: 0
   })
   saleItemsErrors.value.push({ product_id: '', quantity: '', unit_id: '', unit_price: '' })
 }
+
 const removeRow = (idx) => {
   saleItems.value.splice(idx, 1)
   saleItemsErrors.value.splice(idx, 1)
 }
 const calculateTotal = (item) => {
-  item.total_price = (item.quantity || 0) * (item.unit_price || 0)
+  item.total_price = (item.unit_price || 0) * (item.quantity || 0)
 }
+// const recalculateUnitPriceFromTotal = (item) => {
+//   if (item.quantity > 0) {
+//     item.unit_price = (item.total_price || 0) / item.quantity
+//   }
+// }
+
 const validateQuantity = (item, idx) => {
   if (item.quantity < 0) item.quantity = 0
   if (item.quantity > item.stock_qty) item.quantity = item.stock_qty
