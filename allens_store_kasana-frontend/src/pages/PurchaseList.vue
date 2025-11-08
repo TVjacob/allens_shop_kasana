@@ -170,6 +170,8 @@ const inactiveTabClass = 'px-4 py-2 rounded bg-gray-200 text-gray-700 transition
 const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 // const startDate = ref(today);
 // const endDate = ref(today);
+// const accounts = ref([]);
+
 const productSearchQuery = ref('');
 const startDate = ref(new Date().toISOString().split('T')[0]); // today
 const endDate = ref(new Date().toISOString().split('T')[0]);   // today
@@ -202,6 +204,15 @@ const fetchPurchaseOrders = async () => {
 // Tab change
 const changeTab = (tab) => {
   currentTab.value = tab;
+};
+// Fetch accounts
+const fetchAccounts = async () => {
+  try {
+    const res = await api.get('/accounts/cash-bank');
+    accounts.value = res.data;
+  } catch (err) {
+    console.error(err);
+  }
 };
 
 // Computed filtered by tab
@@ -247,6 +258,7 @@ const onFilterChange = debounce(() => {
 
 onMounted(() => {
   fetchPurchaseOrders();
+  fetchAccounts();
 });
 </script>
 

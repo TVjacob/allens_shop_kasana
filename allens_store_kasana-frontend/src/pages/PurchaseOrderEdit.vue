@@ -129,25 +129,25 @@
       const res = await api.get(`/suppliers/orders/${poId}`);
       const data = res.data;
   
-      poHeader.value = {
-        supplier_id: data.supplier_id,
-        invoice_number: data.invoice_number,
-        memo: data.memo || '',
-        purchase_date: data.purchase_date.split('T')[0]
-      };
+      // poHeader.value = {
+      //   supplier_id: data.supplier_id,
+      //   invoice_number: data.invoice_number,
+      //   memo: data.memo || '',
+      //   purchase_date: data.purchase_date.split('T')[0]
+      // };
   
-      poItems.value = data.items.map(i => ({
-        id: i.id,
-        product_id: i.product_id,
-        product_name: i.product_name,
-        stock_qty: i.stock_quantity || 0,
-        unit: i.unit || '',
-        cost_price: i.unit_price,
-        quantity: i.quantity,
-        total_price: i.quantity * i.unit_price,
-        searchResults: [],
-        error: ''
-      }));
+      // poItems.value = data.items.map(i => ({
+      //   id: i.id,
+      //   product_id: i.product_id,
+      //   product_name: i.product_name,
+      //   stock_qty: i.stock_quantity || 0,
+      //   // unit: i.unit_name || '',
+      //   cost_price: i.unit_price,
+      //   quantity: i.quantity,
+      //   total_price: i.quantity * i.unit_price,
+      //   searchResults: [],
+      //   error: ''
+      // }));
   
       loaded.value = true;
     } catch (err) {
