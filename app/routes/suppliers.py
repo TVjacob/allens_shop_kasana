@@ -9,12 +9,13 @@ from flask import Blueprint, request, jsonify
 
 # Purchase Order Status:
 # 1 = Ready to Invoice
+
 # 2 = Partially Paid
 # 3 = Fully Paid
 from app import db
 from app.models import Account, Category, ContainerTransaction, GeneralLedger, InventoryTransaction, Product, ProductUnit, ReturnableContainer, Supplier, PurchaseOrder, PurchaseOrderItem, SupplierPayment
 from app.utils.auth import token_required
-from app.utils.gl_utils import post_to_ledger, generate_transaction_number
+from app.utils.gl_utils import get_latest_purchase_price, post_to_ledger, generate_transaction_number
 from datetime import datetime
 
 from sqlalchemy.orm import joinedload
@@ -252,6 +253,7 @@ def get_purchase_order_fill_details(id):
                 "total_in_stock": container.total_in_stock,
                 "unit_value": container.unit_value
             } if container else None
+        last_purchase_price=get_latest_purchase_price(item.product_id)
 
         items_data.append({
             "id": item.id,
@@ -262,6 +264,7 @@ def get_purchase_order_fill_details(id):
             "unit_id": item.unit_id,
             "unit_name": unit.unit_name if unit else None,
             "units": units_list,
+            "last_purchase_price":last_purchase_price,
 
             "quantity": item.quantity,
             "cost_price": item.unit_price,

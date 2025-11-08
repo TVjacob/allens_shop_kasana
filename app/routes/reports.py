@@ -1585,7 +1585,6 @@ def sales_report():
 
             total_cost_price += cost_value
             total_profit_loss += profit
-
             sale_items_data.append({
                 "product_id": product.id,
                 "product_name": product.name,

@@ -63,12 +63,13 @@
         <thead class="bg-gray-100 text-base">
           <tr>
             <th class="p-3 border min-w-[220px]">Product</th>
-            <th class="p-3 border min-w-[120px] text-center">Sale Type</th>
             <th class="p-3 border min-w-[140px] text-center">Unit</th>
             <th class="p-3 border min-w-[100px] text-center">Stock</th>
-            <th class="p-3 border min-w-[120px] text-center">Last Purchase</th>
-            <th class="p-3 border min-w-[120px] text-center">Selling Price</th>
+            <th class="p-3 border min-w-[120px] text-center">Rate</th>
+            <th class="p-3 border min-w-[120px] text-center">Divide by</th>
             <th class="p-3 border min-w-[120px] text-center">Buying Price</th>
+            <th class="p-3 border min-w-[120px] text-center">Wholesale</th>
+            <th class="p-3 border min-w-[120px] text-center">Retail</th>
             <th class="p-3 border min-w-[120px] text-center">Quantity</th>
             <th class="p-3 border min-w-[120px] text-center">Total</th>
             <th class="p-3 border min-w-[100px] text-center">Action</th>
@@ -94,31 +95,26 @@
                   @update:search="val => onProductSearch(val, idx)"
                   @update:model-value="product => onProductSelect(product, idx)"
                 ></v-autocomplete>
+                <span
+                  v-if="item.selectedProduct"
+                  class="block text-gray-800 mt-1 font-semibold text-lg"
+                >
+                  Selected: {{ item.selectedProduct.name }}
+                </span>
                 <p v-if="errors[`product_${idx}`]" class="text-red-600 text-sm mt-1">
                   {{ errors[`product_${idx}`] }}
                 </p>
               </td>
 
-              <!-- Sale Type -->
-              <td class="p-3 border text-center">
-                <select
-                  v-model="item.sale_type"
-                  @change="updateSaleType(item)"
-                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
-                >
-                  <option value="wholesale">Wholesale</option>
-                  <option value="retail">Retail</option>
-                </select>
-              </td>
-
               <!-- Unit -->
-              <td class="p-3 border text-center">
+              <td class="p-3 border text-center min-w-[140px]">
                 <v-autocomplete
                   v-if="item.units && item.units.length"
                   v-model="item.selectedUnitId"
                   :items="item.units"
                   item-title="unit_name"
                   item-value="id"
+                  label="Unit"
                   variant="outlined"
                   hide-details
                   class="text-base"
@@ -129,15 +125,32 @@
               <!-- Stock -->
               <td class="p-3 border text-center">{{ item.stock_qty }}</td>
 
-              <!-- Last Purchase -->
-              <td class="p-3 border text-center text-gray-700">
-                {{ formatPrice(item.last_purchase_price) }}
-              </td>
 
-              <!-- Selling Price -->
-              <td class="p-3 border text-center text-indigo-700 font-semibold">
-                {{ formatPrice(item.sale_type === 'wholesale' ? item.wholesale_price : item.retail_price) }}
+              <td class="p-3 border" v-if="Number(item.conversion_quantity) <= 1">
+                <input
+                  type="number"
+                  v-model.number="item.rate"
+                  min="0"
+                  placeholder="0"
+                  @input="recalculateUnitPrice(item)"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+                />
               </td>
+              <td class="p-3 border" v-else></td>
+
+
+              <td class="p-3 border"  v-if="Number(item.conversion_quantity) <= 1">
+                <input
+                  type="number"
+                  v-model.number="item.quantity_number"
+                  min="1"
+                  placeholder="1"
+                  @input="recalculateQuantityRate(item)"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition"
+                />
+              </td>
+              <td class="p-3 border" v-else></td>
+
 
               <!-- Buying Price -->
               <td class="p-3 border">
@@ -146,9 +159,18 @@
                   v-model.number="item.cost_price"
                   min="0"
                   @input="calculateTotal(item)"
-                  class="w-full border border-gray-300 rounded-xl p-2 text-base text-right focus:ring-2 focus:ring-indigo-400 transition"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
                 />
+                <p v-if="errors[`cost_${idx}`]" class="text-red-600 text-sm mt-1">
+                  {{ errors[`cost_${idx}`] }}
+                </p>
               </td>
+
+              <!-- Wholesale -->
+              <td class="p-3 border text-center">{{ formatPrice(item.wholesale_price) }}</td>
+
+              <!-- Retail -->
+              <td class="p-3 border text-center">{{ formatPrice(item.retail_price) }}</td>
 
               <!-- Quantity -->
               <td class="p-3 border">
@@ -157,18 +179,16 @@
                   v-model.number="item.quantity"
                   min="0"
                   @input="calculateTotal(item)"
-                  class="w-full border border-gray-300 rounded-xl p-2 text-base text-right focus:ring-2 focus:ring-indigo-400 transition"
+                  class="w-full border border-gray-300 rounded-xl p-2 text-base focus:ring-2 focus:ring-indigo-400 transition text-right"
                 />
+                <p v-if="errors[`quantity_${idx}`]" class="text-red-600 text-sm mt-1">
+                  {{ errors[`quantity_${idx}`] }}
+                </p>
               </td>
 
               <!-- Total -->
-              <td class="p-3 border text-right">
-                <input
-                  type="number"
-                  v-model.number="item.total_price"
-                  @input="recalculateCostFromTotal(item)"
-                  class="w-full border border-gray-300 rounded-xl p-2 text-base font-bold text-indigo-700 text-right focus:ring-2 focus:ring-indigo-400 transition"
-                />
+              <td class="p-3 border text-right font-bold text-indigo-700">
+                {{ formatPrice(item.total_price) }}
               </td>
 
               <!-- Action -->
@@ -179,6 +199,20 @@
                 >
                   ✕
                 </button>
+              </td>
+            </tr>
+
+            <!-- Container Row -->
+            <tr v-if="item.container" class="bg-gray-50 text-sm text-gray-700">
+              <td colspan="11" class="p-2 border-l-4 border-indigo-400">
+                <div class="flex justify-between items-center">
+                  <div>
+                    🧃 Container:
+                    <strong>{{ item.container?.name || 'N/A' }}</strong>
+                    <span class="text-gray-500 ml-1">(Value: {{ formatPrice(item.container?.unit_value || 0) }})</span>
+                  </div>
+                  <span class="italic text-indigo-600">Returnable</span>
+                </div>
               </td>
             </tr>
           </template>
@@ -202,11 +236,12 @@
     <!-- -------- Save Button -------- -->
     <div class="mt-6 text-right">
       <button
-        @click="savePurchaseOrder"
-        class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition transform hover:scale-105 text-lg"
-      >
-        Save Purchase Order
-      </button>
+            @click="savePurchaseOrder"
+            class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition transform hover:scale-105 text-lg"
+          >
+            {{ isEditMode ? 'Update Purchase Order' : 'Save Purchase Order' }}
+          </button>
+
     </div>
 
     <!-- Snackbar -->
@@ -224,12 +259,19 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+// import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router';
+
 import debounce from 'lodash.debounce'
+
 import api from '../api'
+
+const route = useRoute()
+const isEditMode = computed(() => !!route.params.id)
 
 const router = useRouter()
 
+// -------- State --------
 const poHeader = ref({
   supplier_id: '',
   invoice_number: '',
@@ -244,42 +286,124 @@ const poItems = ref([])
 const errors = ref({})
 const snackbar = ref({ show: false, message: '', color: 'success' })
 
+// -------- Computed --------
 const grandTotal = computed(() =>
   poItems.value.reduce((sum, item) => sum + (item.total_price || 0), 0)
 )
 
+onMounted(() => {
+  fetchSuppliers()
+  if (isEditMode.value) {
+    fetchExistingPO(route.params.id)
+  } else {
+    addRow()
+  }
+})
+
+
+// -------- Supplier Logic --------
 const fetchSuppliers = async () => {
   loadingSuppliers.value = true
   try {
     const res = await api.get('/suppliers/')
     suppliers.value = res.data
-  } finally { loadingSuppliers.value = false }
+  } catch (e) {
+    console.error('Failed to fetch suppliers:', e)
+  } finally {
+    loadingSuppliers.value = false
+  }
 }
+
+const fetchExistingPO = async (id) => {
+  try {
+    const res = await api.get(`/suppliers/orders/full_details/${id}`)
+    const po = res.data
+
+    poHeader.value = {
+      supplier_id: po.supplier_id,
+      invoice_number: po.invoice_number,
+      memo: po.memo || '',
+      purchase_date: po.purchase_date.slice(0, 10),
+    }
+
+    selectedSupplier.value = suppliers.value.find(s => s.id === po.supplier_id)
+
+    poItems.value = po.items.map(i => ({
+      id: i.id,
+      product_id: i.product_id,
+      selectedProduct: { id: i.product_id, name: i.product_name },
+      selectedUnitId: i.unit_id,
+      units: i.units || [],
+      cost_price: i.cost_price,
+      wholesale_price: i.wholesale_price || 0,
+      retail_price: i.retail_price || 0,
+      quantity: i.quantity,
+      total_price: i.total_price,
+      is_returnable: i.is_returnable,
+      container: i.container,
+      stock_qty: i.stock_qty || 0,
+      searchResults: [],
+      rate: i.cost_price * (i.conversion_quantity || 1),
+      quantity_number: i.conversion_quantity || 1,
+    }))
+  } catch (err) {
+    console.error('Failed to fetch purchase order:', err)
+    snackbar.value = { show: true, color: 'error', message: 'Failed to load purchase order' }
+  }
+}
+
 
 const selectSupplier = (supplier) => {
+  if (!supplier) {
+    selectedSupplier.value = null
+    poHeader.value.supplier_id = ''
+    return
+  }
   selectedSupplier.value = supplier
-  poHeader.value.supplier_id = supplier ? supplier.id : ''
+  poHeader.value.supplier_id = supplier.id
 }
 
+// -------- Product Logic --------
 const debouncedSearchProduct = debounce(async (query, idx) => {
   const item = poItems.value[idx]
-  if (!query?.trim()) { item.searchResults = []; return }
+  if (!query?.trim()) {
+    item.searchResults = []
+    return
+  }
   item.loading = true
   try {
     const res = await api.get('/inventory/products/search', { params: { name: query } })
     item.searchResults = res.data.map(p => ({
       id: p.id,
-      name: `${p.name} : ${p.category_name}`,
+      name: p.name+' : '+p.category_name,
       stock_qty: p.quantity || 0,
     }))
-  } finally { item.loading = false }
+  } catch (e) {
+    console.error('Product search failed:', e)
+  } finally {
+    item.loading = false
+  }
 }, 400)
 
 const onProductSearch = (val, idx) => debouncedSearchProduct(val, idx)
 
 const onProductSelect = async (product, idx) => {
   const item = poItems.value[idx]
-  if (!product?.id) return
+  if (!product?.id) {
+    // Cleared selection
+    item.product_id = null
+    item.product_name = ''
+    item.units = []
+    item.selectedUnitId = ''
+    item.cost_price = 0
+    item.wholesale_price = 0
+    item.retail_price = 0
+    item.quantity = 0
+    item.total_price = 0
+    item.container = null
+    item.rate =0 
+    return
+  }
 
   try {
     const res = await api.get(`/inventory/products/${product.id}`)
@@ -289,17 +413,16 @@ const onProductSelect = async (product, idx) => {
     item.selectedProduct = { id: data.id, name: data.name }
     item.units = data.units || []
     item.stock_qty = data.quantity || 0
-    item.last_purchase_price = data.last_purchase_price || 0
-    item.sale_type = 'wholesale'
-
-    // auto-select first unit
-    if (item.units.length) {
-      item.selectedUnitId = item.units[0].id
-      onUnitSelect(idx)
-    }
+    item.selectedUnitId = ''
+    item.cost_price = 0
+    item.wholesale_price = 0
+    item.retail_price = 0
+    item.quantity = 0
+    item.total_price = 0
+    item.container = null
   } catch (err) {
     console.error('Failed to fetch product:', err)
-    snackbar.value = { show: true, color: 'error', message: 'Failed to fetch product.' }
+    snackbar.value = { show: true, color: 'error', message: 'Failed to fetch product. Check network or backend.' }
   }
 }
 
@@ -307,27 +430,32 @@ const onUnitSelect = (idx) => {
   const item = poItems.value[idx]
   const unit = item.units.find(u => u.id === item.selectedUnitId)
   if (!unit) return
+  // item.cost_price = unit.cost_price ?? 0
   item.wholesale_price = unit.wholesale_price ?? 0
   item.retail_price = unit.retail_price ?? 0
   item.is_returnable = unit.is_returnable ?? false
   item.container = unit.container || null
-  updateSaleType(item)
-}
-
-const updateSaleType = (item) => {
-  const price = item.sale_type === 'wholesale' ? item.wholesale_price : item.retail_price
-  item.cost_price = price
+  item.rate =0 
+  item.conversion_quantity =unit.conversion_quantity
   calculateTotal(item)
 }
-
-const calculateTotal = (item) => {
-  item.total_price = (item.quantity || 0) * (item.cost_price || 0)
+const recalculateQuantityRate = (item) => {
+  if (item.quantity_number > 0) {
+    item.cost_price = item.rate / item.quantity_number
+  } else {
+    item.cost_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
 }
-
-const recalculateCostFromTotal = (item) => {
-  if (item.quantity > 0) item.cost_price = item.total_price / item.quantity
+const recalculateUnitPrice = (item) => {
+  if (item.rate && item.rate > 0) {
+    item.cost_price = item.rate / (item.quantity_number || item.conversion_quantity || 1)
+  } else {
+    item.cost_price = item.wholesale_price || 0
+  }
+  calculateTotal(item)
 }
-
+// -------- Table Logic --------
 const addRow = () => {
   poItems.value.push({
     product_id: null,
@@ -338,11 +466,12 @@ const addRow = () => {
     cost_price: 0,
     wholesale_price: 0,
     retail_price: 0,
-    last_purchase_price: 0,
-    sale_type: 'wholesale',
     quantity: 0,
     total_price: 0,
     searchResults: [],
+    rate: 0, // 🔹 newly added
+    quantity_number: 24, // ✅ newly added
+    conversion_quantity:1,
     loading: false,
     container: null,
   })
@@ -350,33 +479,88 @@ const addRow = () => {
 
 const removeRow = (idx) => poItems.value.splice(idx, 1)
 
-const validateForm = () => {
-  errors.value = {}
-  let valid = true
-  if (!poHeader.value.supplier_id) { errors.value.supplier = 'Select supplier'; valid = false }
-  if (!poHeader.value.invoice_number) { errors.value.invoice_number = 'Invoice required'; valid = false }
-  if (!poHeader.value.purchase_date) { errors.value.purchase_date = 'Purchase date required'; valid = false }
-
-  poItems.value.forEach((i, idx) => {
-    if (!i.product_id) { errors.value[`product_${idx}`] = 'Select product'; valid = false }
-    if (i.quantity <= 0) { errors.value[`quantity_${idx}`] = 'Quantity > 0'; valid = false }
-  })
-  return valid
+const calculateTotal = (item) => {
+  item.total_price = (item.quantity || 0) * (item.cost_price || 0)
 }
 
 const formatPrice = (v) => new Intl.NumberFormat('en-UG').format(v || 0)
 
+// -------- Validation & Save --------
+const validateForm = () => {
+  errors.value = {}
+  let valid = true
+
+  if (!poHeader.value.supplier_id) {
+    errors.value.supplier = 'Select supplier'
+    valid = false
+  }
+  if (!poHeader.value.invoice_number) {
+    errors.value.invoice_number = 'Invoice required'
+    valid = false
+  }
+  if (!poHeader.value.purchase_date) {
+    errors.value.purchase_date = 'Purchase date required'
+    valid = false
+  }
+
+  poItems.value.forEach((item, idx) => {
+    if (!item.product_id) {
+      errors.value[`product_${idx}`] = 'Select a product'
+      valid = false
+    }
+    if (item.quantity <= 0) {
+      errors.value[`quantity_${idx}`] = 'Quantity must be > 0'
+      valid = false
+    }
+    if (item.cost_price < 0) {
+      errors.value[`cost_${idx}`] = 'Cost cannot be negative'
+      valid = false
+    }
+  })
+
+  return valid
+}
+
+// const savePurchaseOrder = async () => {
+//   if (!validateForm()) return
+
+//   const payload = {
+//     supplier_id: poHeader.value.supplier_id,
+//     invoice_number: poHeader.value.invoice_number,
+//     memo: poHeader.value.memo,
+//     purchase_date: poHeader.value.purchase_date,
+//     items: poItems.value.map(i => ({
+//       product_id: i.product_id,
+//       unit_id: i.selectedUnitId,
+//       quantity: i.quantity,
+//       cost_price: i.cost_price,
+//       is_returnable: i.is_returnable,
+//     })),
+//   }
+
+//   try {
+//     const res = await api.post('/suppliers/orders', payload)
+//     snackbar.value = { show: true, color: 'success', message: res.data.message || 'Saved!' }
+//     router.push(`/purchase-orders/${res.data.po_id}`)
+//   } catch (err) {
+//     snackbar.value = { show: true, color: 'error', message: err.response?.data?.error || err.message }
+//   }
+// }
+
+
+
 const savePurchaseOrder = async () => {
   if (!validateForm()) return
+
   const payload = {
     supplier_id: poHeader.value.supplier_id,
     invoice_number: poHeader.value.invoice_number,
     memo: poHeader.value.memo,
     purchase_date: poHeader.value.purchase_date,
     items: poItems.value.map(i => ({
+      id: i.id,
       product_id: i.product_id,
       unit_id: i.selectedUnitId,
-      sale_type: i.sale_type,
       quantity: i.quantity,
       cost_price: i.cost_price,
       is_returnable: i.is_returnable,
@@ -384,13 +568,44 @@ const savePurchaseOrder = async () => {
   }
 
   try {
-    const res = await api.post('/suppliers/orders', payload)
+    let res
+    if (isEditMode.value) {
+      res = await api.put(`/suppliers/orders/${route.params.id}`, payload)
+    } else {
+      res = await api.post('/suppliers/orders', payload)
+    }
+
     snackbar.value = { show: true, color: 'success', message: res.data.message || 'Saved!' }
+    // router.push('/purchase-orders')
     router.push(`/purchase-orders/${res.data.po_id}`)
+
   } catch (err) {
     snackbar.value = { show: true, color: 'error', message: err.response?.data?.error || err.message }
   }
 }
 
-onMounted(() => { fetchSuppliers(); addRow() })
+
+// -------- Lifecycle --------
+onMounted(() => {
+  fetchSuppliers()
+  addRow()
+})
 </script>
+
+<style>
+/* Slide-fade for snackbar */
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.5s ease;
+}
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateY(-20px);
+  opacity: 0;
+}
+.slide-fade-enter-to,
+.slide-fade-leave-from {
+  transform: translateY(0);
+  opacity: 1;
+}
+</style>
