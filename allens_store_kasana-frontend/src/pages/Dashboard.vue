@@ -1,83 +1,95 @@
 <template>
-  <div class="p-6 space-y-6">
-    <!-- ---------------- Period Selector ---------------- -->
-    <div class="flex flex-wrap gap-4 items-center">
-      <label class="font-bold">Select Period:</label>
-      <select v-model="selectedPeriod" @change="fetchDashboard" class="border rounded px-2 py-1">
+  <div class="dashboard-wrapper space-y-8">
+
+    <!-- ---------------- NAVBAR ---------------- -->
+    <nav class="navbar">
+      <h1 class="navbar-title">📦 Inventory Dashboard</h1>
+    </nav>
+
+    <!-- ---------------- PERIOD SELECTOR ---------------- -->
+    <div class="period-select animated-fade">
+      <label class="label">Select Period:</label>
+
+      <select v-model="selectedPeriod" @change="fetchDashboard" class="modern-select">
         <option value="today">Today</option>
         <option value="week">This Week</option>
         <option value="month">This Month</option>
         <option value="custom">Custom</option>
       </select>
 
-      <!-- Custom Date Range Picker -->
-      <div v-if="selectedPeriod === 'custom'" class="flex gap-2 items-center">
-        <input type="date" v-model="customStartDate" class="border rounded px-2 py-1" @change="fetchDashboard">
-        <span>to</span>
-        <input type="date" v-model="customEndDate" class="border rounded px-2 py-1" @change="fetchDashboard">
+      <!-- Custom Range -->
+      <div v-if="selectedPeriod === 'custom'" class="date-group">
+        <input type="date" v-model="customStartDate" class="modern-input" @change="fetchDashboard">
+        <span class="to-text">to</span>
+        <input type="date" v-model="customEndDate" class="modern-input" @change="fetchDashboard">
       </div>
     </div>
 
-    <!-- ---------------- Metrics Cards ---------------- -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-      <div v-for="card in metricCards" :key="card.title" class="bg-white shadow rounded p-5 flex flex-col justify-between">
-        <div class="flex items-center justify-between">
-          <div class="text-gray-500">{{ card.title }}</div>
-          <div class="text-3xl font-bold">{{ card.value }}</div>
-        </div>
-        <div class="text-sm text-gray-400 mt-2">{{ card.subtitle }}</div>
+    <!-- ---------------- METRIC CARDS ---------------- -->
+    <div class="grid auto-fit gap-6 animated-fade">
+      <div v-for="card in metricCards" :key="card.title" class="metric-card">
+        <div class="metric-title">{{ card.title }}</div>
+        <div class="metric-value">{{ card.value }}</div>
+        <div class="metric-sub">{{ card.subtitle }}</div>
       </div>
     </div>
 
-    <!-- ---------------- Charts ---------------- -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-xl font-bold mb-4">Sales Last 7 Days</h2>
+    <!-- ---------------- CHARTS ---------------- -->
+    <div class="grid auto-fit-2 gap-6">
+      <div class="chart-box animated-slide">
+        <h2 class="chart-title">Sales Last 7 Days</h2>
         <LineChart :chartData="salesChartData" />
       </div>
 
-      <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-xl font-bold mb-4">Expenses Last 7 Days</h2>
+      <div class="chart-box animated-slide">
+        <h2 class="chart-title">Expenses Last 7 Days</h2>
         <LineChart :chartData="expensesChartData" />
       </div>
     </div>
 
-    <!-- ---------------- Best / Least Products ---------------- -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-xl font-bold mb-4">Best Performing Products</h2>
-        <ul class="divide-y divide-gray-200">
-          <li v-for="product in bestProducts" :key="product.product_id" class="py-2 flex justify-between">
-            <span>{{ product.product_name }}</span>
-            <span class="font-bold">UGX {{ product.total_revenue.toLocaleString() }}</span>
+    <!-- ---------------- PRODUCT PERFORMANCE ---------------- -->
+    <div class="grid auto-fit-2 gap-6">
+      <div class="list-box animated-slide">
+        <h2 class="chart-title">Best Performing Products</h2>
+        <ul class="product-list">
+          <li v-for="p in bestProducts" :key="p.product_id" class="product-item">
+            <span>{{ p.product_name }}</span>
+            <span class="product-value">UGX {{ p.total_revenue.toLocaleString() }}</span>
           </li>
         </ul>
       </div>
 
-      <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-xl font-bold mb-4">Least Performing Products</h2>
-        <ul class="divide-y divide-gray-200">
-          <li v-for="product in leastProducts" :key="product.product_id" class="py-2 flex justify-between">
-            <span>{{ product.product_name }}</span>
-            <span class="font-bold">UGX {{ product.total_revenue.toLocaleString() }}</span>
+      <div class="list-box animated-slide">
+        <h2 class="chart-title">Least Performing Products</h2>
+        <ul class="product-list">
+          <li v-for="p in leastProducts" :key="p.product_id" class="product-item">
+            <span>{{ p.product_name }}</span>
+            <span class="product-value">UGX {{ p.total_revenue.toLocaleString() }}</span>
           </li>
         </ul>
       </div>
     </div>
 
-    <!-- ---------------- Optional KPIs ---------------- -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-lg font-bold mb-2">Outstanding Sales (Receivables)</h2>
-        <div class="text-2xl font-bold text-red-500">UGX {{ outstandingSales.toLocaleString() }}</div>
+    <!-- ---------------- KPI CARDS ---------------- -->
+    <div class="grid auto-fit-3 gap-6 animated-fade">
+      <div class="kpi-card">
+        <h2 class="kpi-title">Outstanding Sales</h2>
+        <div class="kpi-value red">UGX {{ outstandingSales.toLocaleString() }}</div>
       </div>
-      <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-lg font-bold mb-2">Outstanding Purchase Orders (Payables)</h2>
-        <div class="text-2xl font-bold text-red-500">UGX {{ outstandingPO.toLocaleString() }}</div>
+
+      <div class="kpi-card">
+        <h2 class="kpi-title">Outstanding Purchase Orders</h2>
+        <div class="kpi-value red">UGX {{ outstandingPO.toLocaleString() }}</div>
       </div>
-      <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-lg font-bold mb-2">Total Purchase Orders</h2>
-        <div class="text-2xl font-bold">{{ totalPurchaseOrders }}</div>
+
+      <div class="kpi-card">
+        <h2 class="kpi-title">Sales Profit</h2>
+        <div class="kpi-value green">UGX {{ salesProfit.toLocaleString() }}</div>
+      </div>
+
+      <div class="kpi-card">
+        <h2 class="kpi-title">Profit</h2>
+        <div class="kpi-value green">UGX {{ profitInRange.toLocaleString() }}</div>
       </div>
     </div>
   </div>
@@ -91,26 +103,24 @@ export default {
   components: { LineChart },
   data() {
     return {
-      // Period
       selectedPeriod: 'today',
       customStartDate: '',
       customEndDate: '',
 
-      // Metrics
       totalProducts: 0,
       totalSales: 0,
+      salesProfit: 0,
       totalExpenses: 0,
       totalCustomers: 0,
       totalSuppliers: 0,
       totalPurchaseOrders: 0,
       outstandingSales: 0,
       outstandingPO: 0,
+      profitInRange: 0,
 
-      // Charts
       salesChartData: { labels: [], datasets: [] },
       expensesChartData: { labels: [], datasets: [] },
 
-      // Products
       bestProducts: [],
       leastProducts: [],
     };
@@ -119,11 +129,13 @@ export default {
     metricCards() {
       return [
         { title: 'Products', value: this.totalProducts, subtitle: 'Active products in inventory' },
-        { title: 'Customers', value: this.totalCustomers, subtitle: 'Total registered customers' },
+        { title: 'Customers', value: this.totalCustomers, subtitle: 'Registered customers' },
         { title: 'Suppliers', value: this.totalSuppliers, subtitle: 'Total suppliers' },
-        { title: 'Sales', value: 'UGX ' + this.totalSales.toLocaleString(), subtitle: 'Total sales made' },
+        { title: 'Sales', value: 'UGX ' + this.totalSales.toLocaleString(), subtitle: 'Total sales' },
+        { title: 'Sales Profit', value: 'UGX ' + this.salesProfit.toLocaleString(), subtitle: 'Revenue - Cost of Goods Sold' },
         { title: 'Expenses', value: 'UGX ' + this.totalExpenses.toLocaleString(), subtitle: 'Total expenses' },
-        { title: 'Purchase Orders', value: this.totalPurchaseOrders, subtitle: 'Total purchase orders' },
+        { title: 'Profit', value: 'UGX ' + this.profitInRange.toLocaleString(), subtitle: 'Sales Profit - Expenses' },
+        { title: 'Purchase Orders', value: this.totalPurchaseOrders, subtitle: 'All POs' },
         { title: 'Outstanding Sales', value: 'UGX ' + this.outstandingSales.toLocaleString(), subtitle: 'Pending receivables' },
         { title: 'Outstanding PO', value: 'UGX ' + this.outstandingPO.toLocaleString(), subtitle: 'Pending payments' },
       ];
@@ -133,7 +145,7 @@ export default {
     async fetchDashboard() {
       try {
         const params = { period: this.selectedPeriod };
-        if (this.selectedPeriod === 'custom' && this.customStartDate && this.customEndDate) {
+        if (this.selectedPeriod === 'custom') {
           params.start_date = this.customStartDate;
           params.end_date = this.customEndDate;
         }
@@ -143,14 +155,15 @@ export default {
 
         this.totalProducts = data.totalProducts;
         this.totalSales = data.totalSales;
+        this.salesProfit = data.sales_profit;
         this.totalExpenses = data.totalExpenses;
+        this.profitInRange = data.profitInRange;
         this.totalCustomers = data.totalCustomers;
         this.totalSuppliers = data.totalSuppliers;
         this.totalPurchaseOrders = data.totalPurchaseOrders;
         this.outstandingSales = data.outstandingSales;
         this.outstandingPO = data.outstandingPO;
 
-        // Charts
         this.salesChartData = {
           labels: data.salesLast7Days.map(d => d.day),
           datasets: [
@@ -158,7 +171,7 @@ export default {
               label: 'Sales',
               data: data.salesLast7Days.map(d => d.amount),
               borderColor: '#3b82f6',
-              backgroundColor: 'rgba(59, 130, 246, 0.2)',
+              backgroundColor: 'rgba(59,130,246,0.25)',
               tension: 0.3
             }
           ]
@@ -171,7 +184,7 @@ export default {
               label: 'Expenses',
               data: data.expensesLast7Days.map(d => d.amount),
               borderColor: '#ef4444',
-              backgroundColor: 'rgba(239, 68, 68, 0.2)',
+              backgroundColor: 'rgba(239,68,68,0.25)',
               tension: 0.3
             }
           ]
@@ -192,5 +205,91 @@ export default {
 </script>
 
 <style scoped>
-/* Optional: customize card hover effects */
+
+/* ---------------- NAVBAR ---------------- */
+.navbar {
+  background: linear-gradient(135deg, #1e1b4b, #4338ca);
+  padding: 22px;
+  border-radius: 14px;
+  text-align: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+}
+
+.navbar-title {
+  font-size: 28px;
+  font-weight: 900;
+  color: white;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ---------------- WRAPPER ---------------- */
+.dashboard-wrapper {
+  padding: 20px;
+  animation: fadeIn 0.6s ease-in-out;
+}
+
+.period-select {
+  background: rgba(255,255,255,0.9);
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Dropdowns */
+.modern-select,
+.modern-input {
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  padding: 8px 10px;
+  background: white;
+  transition: .2s;
+}
+
+/* ---------------- METRICS ---------------- */
+.metric-card {
+  padding: 20px;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+  transition: .2s;
+}
+
+.metric-card:hover {
+  transform: translateY(-5px);
+}
+
+.metric-title {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.metric-value {
+  font-size: 30px;
+  font-weight: 900;
+  margin-top: 8px;
+  background: linear-gradient(90deg, #4338ca, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---------------- KPI ---------------- */
+.kpi-card {
+  background: white;
+  padding: 20px;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+}
+
+.kpi-value.green {
+  color: #16a34a;
+}
+
+/* ---------------- ANIMATIONS ---------------- */
+@keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
+.animated-fade { animation: fadeIn .7s ease-in-out; }
+
 </style>

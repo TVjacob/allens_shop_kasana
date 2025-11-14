@@ -101,27 +101,6 @@ def delete_supplier(id):
     db.session.commit()
     return jsonify({'message': 'Supplier deleted successfully', 'id': id})
 
-# ------------------ Purchase Orders ------------------ #
-
-# @token_required
-# # Get all purchase orders
-# @suppliers_bp.route('/orders', methods=['GET'])
-
-# def get_purchase_orders():
-#     orders = PurchaseOrder.query.filter(PurchaseOrder.status.in_([1, 2, 3,5,4])).all()
-#     data = [{
-#         'id': o.id,
-#         'supplier_id': o.supplier_id,
-#         'supplier_name': o.supplier.name if o.supplier else None,
-#         'invoice_number': o.invoice_number,
-#         'total_amount': o.total_amount,
-#         'total_paid': o.total_paid,
-#         'total_balance': o.total_balance,
-#         'status': o.status,
-#         'created_at': o.created_at.strftime("%Y-%m-%d"),
-#         'purchase_date':o.purchase_date.strftime("%Y-%m-%d")
-#     } for o in orders]
-#     return jsonify(data), 200
 
 @token_required
 # Get all purchase orders with search & date filters

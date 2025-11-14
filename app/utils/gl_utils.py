@@ -89,9 +89,7 @@ def get_latest_purchase_price_no_rounds(product_id, unit_id=None, up_to_date=Non
         )
         if result:
             purchase_item, conversion_quantity = result
-            # Apply conversion
-            # if conversion_quantity and conversion_quantity > 0:
-            #     return round(purchase_item.unit_price / conversion_quantity, 2)
+            print(" cont converted sales ", conversion_quantity)
             return round(purchase_item.unit_price, 2) ,True
 
     # Fallback: latest purchase for any unit
@@ -102,7 +100,9 @@ def get_latest_purchase_price_no_rounds(product_id, unit_id=None, up_to_date=Non
     purchase_item, conversion_quantity = result
     
     if conversion_quantity and conversion_quantity > 0:
+        print(" flase s converted sales ", conversion_quantity)
         return purchase_item.unit_price / conversion_quantity , False
+    print(" conversion_quantity  converted sales ", conversion_quantity)
     return purchase_item.unit_price ,False
 
 def get_latest_purchase_price(product_id, unit_id=None, up_to_date=None):

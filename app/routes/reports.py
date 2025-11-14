@@ -1553,25 +1553,6 @@ def sales_report():
             if is_returnable:
                 actual_qty = item.quantity * conversion_qty
 
-            # --- Get last purchase price ---
-            # last_purchase = None
-            # is_base_unit = True
-            # if item.unit_id:
-            # #     # Try to find exact unit purchase before sale date
-            #     last_purchase = (
-            #         PurchaseOrderItem.query
-            #         .filter(
-            #             PurchaseOrderItem.product_id == product.id,
-            #             PurchaseOrderItem.status == 1,
-            #             PurchaseOrderItem.unit_id == item.unit_id,
-            #             PurchaseOrderItem.created_at <= (end_date or datetime.utcnow())
-            #         )
-            #         .order_by(PurchaseOrderItem.created_at.desc())
-            #         .first()
-            #     )
-            # if not last_purchase:
-
-            #     is_base_unit=False
 
             last_purchase_price, is_base_unit =get_latest_purchase_price_no_rounds(product.id,item.unit_id,end_date)
             print(" last_purchase_price ",last_purchase_price)
