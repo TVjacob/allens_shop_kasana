@@ -41,3 +41,6 @@ app/__pycache__/*
 app/migrations/*
 app/routes/__pycache__/*
 *.pyc
+
+app/config.py
+/app/config.py

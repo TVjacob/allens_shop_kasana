@@ -43,3 +43,6 @@ app/routes/__pycache__/*
 *.pyc
 
 /__pycache__
+
+config.py
+/config.py

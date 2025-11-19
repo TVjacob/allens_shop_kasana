@@ -75,6 +75,7 @@ export default {
         '/saleslist': 'Sales List',
         '/accounts': 'Accounts',
         '/customermanagement': 'CustomerManagement',
+        '/stockadjustments':'StockAdjustments',
       };
       return titles[route.path] || '';
     });

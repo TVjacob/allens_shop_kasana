@@ -49,6 +49,7 @@ def create_app():
     from app.routes.dashboard import dashboard_bp
     from app.routes.reports import reports_bp
     from app.routes.customer_balances import customer_balances_bp
+    from app.routes.stock_adjustment_crud import stock_adjustment_bp
 
     # Register blueprints
     app.register_blueprint(inventory_bp, url_prefix='/api/inventory')
@@ -62,6 +63,8 @@ def create_app():
     app.register_blueprint(customer_bp, url_prefix='/api/customer')
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
+    app.register_blueprint(stock_adjustment_bp,url_prefix='/api/stock-adjustments')
+
     # customer_balances_bp = Blueprint('customer_balances', __name__, url_prefix='/customer_balances')
 
     app.register_blueprint(customer_balances_bp, url_prefix='/api/customer_balances')

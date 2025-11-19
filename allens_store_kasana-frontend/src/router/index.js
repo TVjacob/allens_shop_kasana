@@ -42,6 +42,7 @@ import CustomerManagement from '@/pages/CustomerManagement.vue';
 import EditSale from '@/pages/EditSale.vue';
 import EditPurchases from '@/pages/EditPurchases.vue';
 import PurchasedProducts from '@/pages/reports/PurchasedProducts.vue';
+import StockAdjustments from '@/pages/StockAdjustments.vue';
 // import EditSale from '@/pages/EditSale.vue';
 
 const routes = [
@@ -102,6 +103,12 @@ const routes = [
         name: 'PurchaseOrderDetails',
         component: PurchaseDetails,
         meta: { showGreeting: false, pageName: 'Purchase Order Details', requiresAuth: true,}
+      },
+      {
+        path:'/stockadjustments',
+        name:'StockAdjustments',
+        component: StockAdjustments,
+        meta: { showGreeting: false, pageName: 'Stock Adjustments', requiresAuth: true,}
       },
       {
         path: '/purchase-orders/:id/edit',

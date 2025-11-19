@@ -361,15 +361,40 @@ class User(db.Model, StatusMixin):
     def __repr__(self):
         return f"<User {self.username}>"
     
-# ------------------ Stock Adjustments ------------------
+# ------------------ Stock Adjustments ------------------# ------------------ Stock Adjustments ------------------
 class StockAdjustment(db.Model, StatusMixin):
+    __tablename__ = 'stock_adjustment'
+
     id = db.Column(db.Integer, primary_key=True)
-    product_id = db.Column(db.Integer, db.ForeignKey('product.id'))
-    adjustment_type = db.Column(db.String(20))
-    quantity = db.Column(db.Integer, nullable=False)
-    reason = db.Column(db.String(200))
+
+    # Link to product/unit/container
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=True)
+    product_unit_id = db.Column(db.Integer, db.ForeignKey('product_unit.id'), nullable=True)
+    container_id = db.Column(db.Integer, db.ForeignKey('returnable_container.id'), nullable=True)
+
+    adjustment_type = db.Column(db.String(20), nullable=False)  # 'Increase', 'Decrease', 'Correction'
+    quantity = db.Column(db.Integer, default=0, nullable=False)
+
+    # ➤ Newly added fields
+    previous_quantity = db.Column(db.Integer,  default=0, nullable=True)
+    new_quantity = db.Column(db.Integer,  default=0,nullable=True)
+
+    reason = db.Column(db.String(200), nullable=False)
+    transaction_no = db.Column(db.Integer, db.ForeignKey('transaction_number.id'), nullable=True)
+
     adjusted_at = db.Column(db.DateTime, default=datetime.utcnow)
-    transaction_no = db.Column(db.Integer, db.ForeignKey('transaction_number.id'))
+
+    # Relationships
+    product = db.relationship('Product', backref=db.backref('stock_adjustments', lazy=True))
+    product_unit = db.relationship('ProductUnit', backref=db.backref('stock_adjustments', lazy=True))
+    container = db.relationship('ReturnableContainer', backref=db.backref('stock_adjustments', lazy=True))
+    transaction_number = db.relationship('TransactionNumber', backref=db.backref('stock_adjustments', lazy=True))
+
+    def __repr__(self):
+        target = self.container_id or self.product_unit_id or self.product_id
+        return f"<StockAdjustment {self.adjustment_type} {self.quantity} for {target}>"
+
+
 
 # ------------------ Expenses ------------------
 
