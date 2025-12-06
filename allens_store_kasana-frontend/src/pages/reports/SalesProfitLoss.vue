@@ -113,9 +113,10 @@ export default {
   name: "SalesProfitLoss",
   setup() {
     const filters = reactive({
-      start_date: "",
-      end_date: "",
+      start_date: new Date().toISOString().substr(0,10),
+      end_date:  new Date().toISOString().substr(0,10),
       customer_id: null,
+
       category_id: null,
     });
 
