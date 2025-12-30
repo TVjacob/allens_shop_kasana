@@ -46,3 +46,4 @@ app/routes/__pycache__/*
 
 config.py
 /config.py
+config_dev.py

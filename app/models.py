@@ -53,10 +53,45 @@ class Product(db.Model, StatusMixin):
     quantity = db.Column(db.Integer, default=0)
     price = db.Column(db.Float, default=0)
     whole_price = db.Column(db.Float, default=0)
+    # Relationship to Category
     category = db.relationship('Category', backref='products', lazy=True)
+
+    # Relationship to ProductUnit
+    units = db.relationship(
+        "ProductUnit",
+        backref="product",
+        lazy=True,
+        cascade="all, delete-orphan"
+    )
 
     # created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
+class ProductUnit(db.Model, StatusMixin):
+    __tablename__ = "product_unit"
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
+    unit_name = db.Column(db.String(50), nullable=False)  # e.g., "Quarter", "Sack", "Kilo", "Gram"
+    conversion_quantity = db.Column(db.Float, default=1.0, nullable=False)  # Conversion to base unit (e.g., 1 sack = 50 kilos)
+    retail_price = db.Column(db.Float, default=0.0)
+    wholesale_price = db.Column(db.Float, default=0.0)
+    is_returnable = db.Column(db.Boolean, default=False)  # For returnable units if applicable
+    unit_code = db.Column(db.String(50), unique=False, nullable=True)  # Optional barcode or code
+
+
+
+
+    def __repr__(self):
+        return f"<ProductUnit {self.unit_name} of {self.product.name}>"
+
+    def get_total_retail_price(self, quantity):
+        """Calculate total retail value for given quantity in this unit."""
+        return self.retail_price * quantity
+
+    def get_total_wholesale_price(self, quantity):
+        """Calculate total wholesale value for given quantity in this unit."""
+        return self.wholesale_price * quantity
 
 
 
